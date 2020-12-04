@@ -117,7 +117,7 @@ namespace gtsam {
       const KeyFormatter& keyFormatter = DefaultKeyFormatter) const;
 
     /** unnormalized error, \f$ 0.5 \sum_i (h_i(X_i)-z)^2/\sigma^2 \f$ in the most common case */
-    double error(const Values& values) const;
+    virtual double error(const Values& values) const;
 
     /** Unnormalized probability. O(n) */
     double probPrime(const Values& values) const;
@@ -143,7 +143,7 @@ namespace gtsam {
     Ordering orderingCOLAMDConstrained(const FastMap<Key, int>& constraints) const;
 
     /// Linearize a nonlinear factor graph
-    boost::shared_ptr<GaussianFactorGraph> linearize(const Values& linearizationPoint) const;
+    virtual boost::shared_ptr<GaussianFactorGraph> linearize(const Values& linearizationPoint) const;
 
     /// typdef for dampen functions used below
     typedef std::function<void(const boost::shared_ptr<HessianFactor>& hessianFactor)> Dampen;
