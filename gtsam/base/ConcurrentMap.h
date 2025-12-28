@@ -41,10 +41,10 @@ using ConcurrentMapBase = tbb::concurrent_unordered_map<
 
 #else
 
-// If we're not using TBB, use a FastMap for ConcurrentMap
-#include <gtsam/base/FastMap.h>
+// If we're not using TBB, use a std::unordered_map
+#include <unordered_map>
 template <typename KEY, typename VALUE>
-using ConcurrentMapBase = gtsam::FastMap<KEY, VALUE>;
+using ConcurrentMapBase = std::unordered_map<KEY, VALUE, std::hash<KEY> >;
 
 #endif
 
