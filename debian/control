@@ -6,7 +6,6 @@ Rules-Requires-Root: no
 Build-Depends:
  debhelper-compat (= 13),
  cmake,
- libtbb-dev,
  libmetis-dev,
  libeigen3-dev,
  libboost-system-dev,
