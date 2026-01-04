@@ -1,0 +1,5 @@
+usr/lib/**
+usr/include/gtsam/**
+usr/include/gtsam_unstable/**
+usr/lib/cmake/**
+usr/local/lib/cmake/**

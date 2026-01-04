@@ -1,36 +1,14 @@
 #!/usr/bin/make -f
 
-# Common CMake options
-CMAKE_OPTS = \
-	-DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF \
-	-DGTSAM_BUILD_TESTS=OFF \
-	-DGTSAM_USE_SYSTEM_METIS=ON \
-	-DGTSAM_USE_SYSTEM_EIGEN=ON \
-	-DGTSAM_BUILD_WITH_MARCH_NATIVE=OFF
-
 %:
 	dh $@ --buildsystem=cmake
 
 override_dh_auto_configure:
-	dh_auto_configure --builddirectory=build-tbb -- \
-		$(CMAKE_OPTS) \
+	dh_auto_configure -- \
+		-DGTSAM_BUILD_DOCS=OFF \
+		-DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF \
+		-DGTSAM_BUILD_TESTS=OFF \
+		-DGTSAM_USE_SYSTEM_METIS=ON \
+		-DGTSAM_USE_SYSTEM_EIGEN=ON \
+		-DGTSAM_BUILD_WITH_MARCH_NATIVE=OFF \
 		-DGTSAM_WITH_TBB=ON
-	dh_auto_configure --builddirectory=build-no-tbb -- \
-		$(CMAKE_OPTS) \
-		-DGTSAM_WITH_TBB=OFF
-
-override_dh_auto_build:
-	dh_auto_build --builddirectory=build-tbb
-	dh_auto_build --builddirectory=build-no-tbb
-
-override_dh_auto_test:
-	:
-
-override_dh_auto_install:
-	dh_auto_install --builddirectory=build-tbb --destdir=debian/tmp-tbb
-	dh_auto_install --builddirectory=build-no-tbb --destdir=debian/tmp-no-tbb
-
-override_dh_install:
-	dh_install -p libgtsam-dev --sourcedir=debian/tmp-tbb
-	dh_install -p libgtsam-no-tbb-dev --sourcedir=debian/tmp-no-tbb
-

@@ -1,8 +1,0 @@
-usr/lib/*/libgtsam.so
-usr/lib/*/libgtsam.so.*
-usr/lib/*/libgtsam_unstable.so
-usr/lib/*/libgtsam_unstable.so.*
-usr/lib/*/libcephes-gtsam.so.*
-usr/include/gtsam/**
-usr/include/gtsam_unstable/**
-usr/lib/cmake

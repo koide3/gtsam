@@ -1,4 +1,4 @@
-Source: libgtsam
+Source: gtsam
 Section: libs
 Priority: optional
 Maintainer: k.koide <k.koide@aist.go.jp>
@@ -18,7 +18,7 @@ Build-Depends:
  libboost-thread-dev,
  libboost-timer-dev,
  libboost-chrono-dev
-regexStandards-Version: 4.6.2
+Standards-Version: 4.6.2
 Homepage: https://github.com/borglab/gtsam
 
 Package: libgtsam-dev
@@ -31,17 +31,4 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
 Description: GTSAM: Georgia Tech Smoothing and Mapping Library
- This repository is intended as a temporary fork of the GTSAM repository until the official PPA supports GTSAM 4.3a0 and later.
-
-Package: libgtsam-no-tbb-dev
-Section: libs
-Architecture: any
-Multi-Arch: foreign
-Provides: libgtsam-dev
-Conflicts: libgtsam-dev
-Replaces: libgtsam-dev
-Depends:
- ${shlibs:Depends},
- ${misc:Depends},
-Description: GTSAM: Georgia Tech Smoothing and Mapping Library (without TBB)
  This repository is intended as a temporary fork of the GTSAM repository until the official PPA supports GTSAM 4.3a0 and later.
