@@ -6,15 +6,27 @@ Rules-Requires-Root: no
 Build-Depends:
  debhelper-compat (= 13),
  cmake,
+ libtbb-dev,
  libmetis-dev,
- libeigen3-dev
-Standards-Version: 4.6.2
+ libeigen3-dev,
+ libboost-system-dev,
+ libboost-serialization-dev,
+ libboost-date-time-dev,
+ libboost-filesystem-dev,
+ libboost-program-options-dev,
+ libboost-regex-dev,
+ libboost-thread-dev,
+ libboost-timer-dev,
+ libboost-chrono-dev
+regexStandards-Version: 4.6.2
 Homepage: https://github.com/borglab/gtsam
 
 Package: libgtsam-dev
 Section: libs
 Architecture: any
 Multi-Arch: foreign
+Conflicts: libgtsam-no-tbb-dev
+Replaces: libgtsam-no-tbb-dev
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
@@ -24,6 +36,10 @@ Description: GTSAM: Georgia Tech Smoothing and Mapping Library
 Package: libgtsam-no-tbb-dev
 Section: libs
 Architecture: any
+Multi-Arch: foreign
+Provides: libgtsam-dev
+Conflicts: libgtsam-dev
+Replaces: libgtsam-dev
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
