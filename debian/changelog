@@ -1,3 +1,9 @@
+gtsam-no-tbb (4.3.0-1-1ppa1-noble1) noble; urgency=medium
+
+  * 4.3a0
+
+ -- Kenji Koide <k.koide@aist.go.jp>  Sun, 04 Jan 2026 20:13:12 +0900
+
 gtsam-no-tbb (4.3.0-1-1ppa1-jammy1) jammy; urgency=medium
 
   * 4.3a0
