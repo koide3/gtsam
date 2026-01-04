@@ -1,0 +1,31 @@
+Source: libgtsam
+Section: libs
+Priority: optional
+Maintainer: k.koide <k.koide@aist.go.jp>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake,
+ libmetis-dev,
+ libeigen3-dev
+Standards-Version: 4.6.2
+Homepage: https://github.com/borglab/gtsam
+
+Package: libgtsam-dev
+Section: libs
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: GTSAM: Georgia Tech Smoothing and Mapping Library
+ This repository is intended as a temporary fork of the GTSAM repository until the official PPA supports GTSAM 4.3a0 and later.
+
+Package: libgtsam-no-tbb-dev
+Section: libs
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: GTSAM: Georgia Tech Smoothing and Mapping Library (without TBB)
+ This repository is intended as a temporary fork of the GTSAM repository until the official PPA supports GTSAM 4.3a0 and later.
