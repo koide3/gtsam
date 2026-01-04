@@ -1,3 +1,9 @@
+gtsam-no-tbb (4.3.0-1-1ppa2-noble1) noble; urgency=medium
+
+  * remove tbb dependency
+
+ -- Kenji Koide <k.koide@aist.go.jp>  Sun, 04 Jan 2026 22:22:09 +0900
+
 gtsam-no-tbb (4.3.0-1-1ppa2-jammy1) jammy; urgency=medium
 
   * remove tbb dependency
