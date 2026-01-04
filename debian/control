@@ -24,6 +24,7 @@ Package: libgtsam-no-tbb-dev
 Section: libs
 Architecture: any
 Multi-Arch: foreign
+Provides: libgtsam-dev
 Conflicts: libgtsam-dev
 Replaces: libgtsam-dev
 Depends:
