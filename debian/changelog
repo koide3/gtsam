@@ -1,3 +1,21 @@
+gtsam (4.3.0-1-1ppa3-noble1) noble; urgency=medium
+
+  * 4.3a0 on noble
+
+ -- Kenji Koide <k.koide@aist.go.jp>  Sun, 11 Jan 2026 08:45:07 +0900
+
+gtsam (4.3.0-1-1ppa3-jammy1) jammy; urgency=medium
+
+  * 4.3a0 on jammy
+
+ -- Kenji Koide <k.koide@aist.go.jp>  Sun, 11 Jan 2026 08:43:30 +0900
+
+gtsam (4.3.0-1-1ppa1-noble1) noble; urgency=medium
+
+  * 4.3a0
+
+ -- Kenji Koide <k.koide@aist.go.jp>  Sun, 11 Jan 2026 08:38:30 +0900
+
 gtsam (4.3.0-1-1ppa1-jammy1) jammy; urgency=medium
 
   * 4.3a0
