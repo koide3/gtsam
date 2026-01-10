@@ -34,8 +34,8 @@ namespace gtsam {
     typedef BayesNet<SymbolicConditional> Base;
     typedef SymbolicBayesNet This;
     typedef SymbolicConditional ConditionalType;
-    typedef boost::shared_ptr<This> shared_ptr;
-    typedef boost::shared_ptr<ConditionalType> sharedConditional;
+    typedef std::shared_ptr<This> shared_ptr;
+    typedef std::shared_ptr<ConditionalType> sharedConditional;
 
     /// @name Standard Constructors
     /// @{
@@ -64,12 +64,12 @@ namespace gtsam {
      * Constructor that takes an initializer list of shared pointers.
      *  SymbolicBayesNet bn = {make_shared<SymbolicConditional>(), ...};
      */
-    SymbolicBayesNet(std::initializer_list<boost::shared_ptr<SymbolicConditional>> conditionals)
+    SymbolicBayesNet(std::initializer_list<std::shared_ptr<SymbolicConditional>> conditionals)
         : Base(conditionals) {}
 
     /// Construct from a single conditional
     SymbolicBayesNet(SymbolicConditional&& c) {
-      push_back(boost::make_shared<SymbolicConditional>(c));
+      emplace_shared<SymbolicConditional>(c);
     }
 
     /**
@@ -79,12 +79,9 @@ namespace gtsam {
      *     SymbolicBayesNet(SymbolicConditional(...))(SymbolicConditional(...));
      */
     SymbolicBayesNet& operator()(SymbolicConditional&& c) {
-      push_back(boost::make_shared<SymbolicConditional>(c));
+      emplace_shared<SymbolicConditional>(c);
       return *this;
     }
-
-    /// Destructor
-    virtual ~SymbolicBayesNet() {}
 
     /// @}
 
@@ -104,12 +101,14 @@ namespace gtsam {
     /// @}
 
   private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
     void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
       ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(Base);
     }
+#endif
 };
 
   /// traits

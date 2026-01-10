@@ -26,6 +26,7 @@
 #include <gtsam/inference/Key.h>
 
 #include <vector>
+#include <cassert>
 
 namespace gtsam {
 
@@ -106,8 +107,8 @@ class CameraSet : public std::vector<CAMERA, Eigen::aligned_allocator<CAMERA>> {
    */
   template <class POINT>
   ZVector project2(const POINT& point,                          //
-                   boost::optional<FBlocks&> Fs = boost::none,  //
-                   boost::optional<Matrix&> E = boost::none) const {
+                   FBlocks* Fs = nullptr,  //
+                   Matrix* E = nullptr) const {
     static const int N = FixedDimension<POINT>::value;
 
     // Allocate result
@@ -131,12 +132,36 @@ class CameraSet : public std::vector<CAMERA, Eigen::aligned_allocator<CAMERA>> {
     return z;
   }
 
+  /** An overload of the project2 function to accept
+   * full matrices and vectors and pass it to the pointer
+   * version of the function.
+   *
+   * Use SFINAE to resolve overload ambiguity.
+   */
+  template <class POINT, class... OptArgs>
+  typename std::enable_if<(sizeof...(OptArgs) != 0), ZVector>::type project2(
+      const POINT& point, OptArgs&... args) const {
+    // pass it to the pointer version of the function
+    return project2(point, (&args)...);
+  }
+
   /// Calculate vector [project2(point)-z] of re-projection errors
   template <class POINT>
   Vector reprojectionError(const POINT& point, const ZVector& measured,
-                           boost::optional<FBlocks&> Fs = boost::none,  //
-                           boost::optional<Matrix&> E = boost::none) const {
+                           FBlocks* Fs = nullptr,  //
+                           Matrix* E = nullptr) const {
     return ErrorVector(project2(point, Fs, E), measured);
+  }
+
+  /** An overload o the reprojectionError function to accept
+   * full matrices and vectors and pass it to the pointer
+   * version of the function
+   */
+  template <class POINT, class... OptArgs, typename = std::enable_if_t<sizeof...(OptArgs)!=0>>
+  Vector reprojectionError(const POINT& point, const ZVector& measured,
+                           OptArgs&... args) const {
+    // pass it to the pointer version of the function
+    return reprojectionError(point, measured, (&args)...);
   }
 
   /**
@@ -303,12 +328,16 @@ class CameraSet : public std::vector<CAMERA, Eigen::aligned_allocator<CAMERA>> {
    * g = F' * (b - E * P * E' * b)
    * Fixed size version
    */
+#ifdef _WIN32
+#if _MSC_VER < 1937
   template <int N>  // N = 2 or 3
   static SymmetricBlockMatrix SchurComplement(
       const FBlocks& Fs, const Matrix& E, const Eigen::Matrix<double, N, N>& P,
       const Vector& b) {
     return SchurComplement<N, D>(Fs, E, P, b);
   }
+#endif
+#endif
 
   /// Computes Point Covariance P, with lambda parameter
   template <int N>  // N = 2 or 3 (point dimension)
@@ -375,7 +404,7 @@ class CameraSet : public std::vector<CAMERA, Eigen::aligned_allocator<CAMERA>> {
 
     FastMap<Key, size_t> KeySlotMap;
     for (size_t slot = 0; slot < allKeys.size(); slot++)
-      KeySlotMap.insert(std::make_pair(allKeys[slot], slot));
+      KeySlotMap.emplace(allKeys[slot], slot);
 
     // Schur complement trick
     // G = F' * F - F' * E * P * E' * F
@@ -414,8 +443,7 @@ class CameraSet : public std::vector<CAMERA, Eigen::aligned_allocator<CAMERA>> {
 
       // (DxD) += (DxZDim) * ( (ZDimxD) - (ZDimx3) * (3xZDim) * (ZDimxD) )
       // add contribution of current factor
-      // TODO(gareth): Eigen doesn't let us pass the expression. Call eval() for
-      // now...
+      // Eigen doesn't let us pass the expression so we call eval()
       augmentedHessian.updateDiagonalBlock(
           aug_i,
           ((FiT *
@@ -444,12 +472,14 @@ class CameraSet : public std::vector<CAMERA, Eigen::aligned_allocator<CAMERA>> {
   }
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION  ///
   /// Serialization function
   friend class boost::serialization::access;
   template <class ARCHIVE>
   void serialize(ARCHIVE& ar, const unsigned int /*version*/) {
     ar&(*this);
   }
+#endif
 
  public:
   GTSAM_MAKE_ALIGNED_OPERATOR_NEW

@@ -42,7 +42,7 @@ namespace gtsam {
  *    public:
  *     MultiplyFunctor(double m) : m_(m) {}
  *     Matrix operator()(const Matrix &X,
- *              OptionalJacobian<-1, -1> H = boost::none) const {
+ *              OptionalJacobian<-1, -1> H = {}) const {
  *       if (H)
  *         *H = m_ * Matrix::Identity(X.rows()*X.cols(), X.rows()*X.cols());
  *       return m_ * X;
@@ -62,9 +62,13 @@ class FunctorizedFactor : public NoiseModelFactorN<T> {
 
   R measured_;  ///< value that is compared with functor return value
   SharedNoiseModel noiseModel_;                          ///< noise model
-  std::function<R(T, boost::optional<Matrix &>)> func_;  ///< functor instance
+  std::function<R(T, OptionalMatrixType)> func_;  ///< functor instance
 
  public:
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   /** default constructor - only use for serialization */
   FunctorizedFactor() {}
 
@@ -76,19 +80,18 @@ class FunctorizedFactor : public NoiseModelFactorN<T> {
    * @param func: The instance of the functor object
    */
   FunctorizedFactor(Key key, const R &z, const SharedNoiseModel &model,
-                    const std::function<R(T, boost::optional<Matrix &>)> func)
+                    const std::function<R(T, OptionalMatrixType)> func)
       : Base(model, key), measured_(z), noiseModel_(model), func_(func) {}
 
   ~FunctorizedFactor() override {}
 
   /// @return a deep copy of this factor
   NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<NonlinearFactor>(
+    return std::static_pointer_cast<NonlinearFactor>(
         NonlinearFactor::shared_ptr(new FunctorizedFactor<R, T>(*this)));
   }
 
-  Vector evaluateError(const T &params, boost::optional<Matrix &> H =
-                                            boost::none) const override {
+  Vector evaluateError(const T &params, OptionalMatrixType H) const override {
     R x = func_(params, H);
     Vector error = traits<R>::Local(measured_, x);
     return error;
@@ -116,6 +119,7 @@ class FunctorizedFactor : public NoiseModelFactorN<T> {
   /// @}
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template <class ARCHIVE>
@@ -126,6 +130,7 @@ class FunctorizedFactor : public NoiseModelFactorN<T> {
     ar &BOOST_SERIALIZATION_NVP(measured_);
     ar &BOOST_SERIALIZATION_NVP(func_);
   }
+#endif
 };
 
 /// traits
@@ -162,11 +167,14 @@ class FunctorizedFactor2 : public NoiseModelFactorN<T1, T2> {
 
   R measured_;  ///< value that is compared with functor return value
   SharedNoiseModel noiseModel_;  ///< noise model
-  using FunctionType = std::function<R(T1, T2, boost::optional<Matrix &>,
-                                       boost::optional<Matrix &>)>;
+  using FunctionType = std::function<R(T1, T2, OptionalMatrixType, OptionalMatrixType)>;
   FunctionType func_;  ///< functor instance
 
  public:
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   /** default constructor - only use for serialization */
   FunctorizedFactor2() {}
 
@@ -188,14 +196,13 @@ class FunctorizedFactor2 : public NoiseModelFactorN<T1, T2> {
 
   /// @return a deep copy of this factor
   NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<NonlinearFactor>(
+    return std::static_pointer_cast<NonlinearFactor>(
         NonlinearFactor::shared_ptr(new FunctorizedFactor2<R, T1, T2>(*this)));
   }
 
   Vector evaluateError(
       const T1 &params1, const T2 &params2,
-      boost::optional<Matrix &> H1 = boost::none,
-      boost::optional<Matrix &> H2 = boost::none) const override {
+      OptionalMatrixType H1, OptionalMatrixType H2) const override {
     R x = func_(params1, params2, H1, H2);
     Vector error = traits<R>::Local(measured_, x);
     return error;
@@ -224,6 +231,7 @@ class FunctorizedFactor2 : public NoiseModelFactorN<T1, T2> {
   /// @}
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template <class ARCHIVE>
@@ -234,6 +242,7 @@ class FunctorizedFactor2 : public NoiseModelFactorN<T1, T2> {
     ar &BOOST_SERIALIZATION_NVP(measured_);
     ar &BOOST_SERIALIZATION_NVP(func_);
   }
+#endif
 };
 
 /// traits

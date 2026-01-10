@@ -1,8 +1,17 @@
 #pragma once
 
-#include <string>
+#include <gtsam/dllexport.h>
+
 #include <iostream>
+#include <random>
 #include <sstream>
+#include <string>
+
+/**
+ * @brief Global default pseudo-random number generator object.
+ * In wrappers we can access std::mt19937_64 via gtsam.MT19937
+ */
+static std::mt19937_64 kRandomNumberGenerator(42);
 
 namespace gtsam {
 /**
@@ -11,7 +20,7 @@ namespace gtsam {
  * of an object when it prints to cout.
  * https://stackoverflow.com/questions/5419356/redirect-stdout-stderr-to-a-string
  */
-struct RedirectCout {
+struct GTSAM_EXPORT RedirectCout {
   /// constructor -- redirect stdout buffer to a stringstream buffer
   RedirectCout() : ssBuffer_(), coutBuffer_(std::cout.rdbuf(ssBuffer_.rdbuf())) {}
 
@@ -26,18 +35,11 @@ private:
   std::streambuf* coutBuffer_;
 };
 
-}
+}  // namespace gtsam
 
-// boost::index_sequence was introduced in 1.66, so we'll manually define an
-// implementation if user has 1.65.  boost::index_sequence is used to get array
-// indices that align with a parameter pack.
-#include <boost/version.hpp>
-#if BOOST_VERSION >= 106600
-#include <boost/mp11/integer_sequence.hpp>
-#else
-namespace boost {
-namespace mp11 {
+namespace gtsam {
 // Adapted from https://stackoverflow.com/a/32223343/9151520
+// An adaptation of boost::mp11::index_sequence
 template <size_t... Ints>
 struct index_sequence {
   using type = index_sequence;
@@ -49,20 +51,16 @@ template <class Sequence1, class Sequence2>
 struct _merge_and_renumber;
 
 template <size_t... I1, size_t... I2>
-struct _merge_and_renumber<index_sequence<I1...>, index_sequence<I2...> >
+struct _merge_and_renumber<index_sequence<I1...>, index_sequence<I2...>>
     : index_sequence<I1..., (sizeof...(I1) + I2)...> {};
 }  // namespace detail
 template <size_t N>
-struct make_index_sequence
-    : detail::_merge_and_renumber<
-          typename make_index_sequence<N / 2>::type,
-          typename make_index_sequence<N - N / 2>::type> {};
+struct make_index_sequence : detail::_merge_and_renumber<typename make_index_sequence<N / 2>::type,
+                                                         typename make_index_sequence<N - N / 2>::type> {};
 template <>
 struct make_index_sequence<0> : index_sequence<> {};
 template <>
 struct make_index_sequence<1> : index_sequence<0> {};
 template <class... T>
 using index_sequence_for = make_index_sequence<sizeof...(T)>;
-}  // namespace mp11
-}  // namespace boost
-#endif
+}  // namespace gtsam

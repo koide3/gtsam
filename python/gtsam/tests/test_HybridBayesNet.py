@@ -17,8 +17,10 @@ import numpy as np
 from gtsam.symbol_shorthand import A, X
 from gtsam.utils.test_case import GtsamTestCase
 
-from gtsam import (DiscreteConditional, DiscreteKeys, DiscreteValues, GaussianConditional,
-                   GaussianMixture, HybridBayesNet, HybridValues, noiseModel, VectorValues)
+from gtsam import (DiscreteConditional, DiscreteValues,
+                   GaussianConditional, HybridBayesNet,
+                   HybridGaussianConditional, HybridValues, VectorValues,
+                   noiseModel)
 
 
 class TestHybridBayesNet(GtsamTestCase):
@@ -31,8 +33,8 @@ class TestHybridBayesNet(GtsamTestCase):
 
         # Create the continuous conditional
         I_1x1 = np.eye(1)
-        conditional = GaussianConditional.FromMeanAndStddev(X(0), 2 * I_1x1, X(1), [-4],
-                                                            5.0)
+        conditional = GaussianConditional.FromMeanAndStddev(
+            X(0), 2 * I_1x1, X(1), [-4], 5.0)
 
         # Create the noise models
         model0 = noiseModel.Diagonal.Sigmas([2.0])
@@ -41,14 +43,12 @@ class TestHybridBayesNet(GtsamTestCase):
         # Create the conditionals
         conditional0 = GaussianConditional(X(1), [5], I_1x1, model0)
         conditional1 = GaussianConditional(X(1), [2], I_1x1, model1)
-        discrete_keys = DiscreteKeys()
-        discrete_keys.push_back(Asia)
 
         # Create hybrid Bayes net.
         bayesNet = HybridBayesNet()
         bayesNet.push_back(conditional)
-        bayesNet.push_back(GaussianMixture(
-            [X(1)], [], discrete_keys, [conditional0, conditional1]))
+        bayesNet.push_back(
+            HybridGaussianConditional(Asia, [conditional0, conditional1]))
         bayesNet.push_back(DiscreteConditional(Asia, "99/1"))
 
         # Create values at which to evaluate.
@@ -76,7 +76,7 @@ class TestHybridBayesNet(GtsamTestCase):
         self.check_invariance(bayesNet.at(0).asGaussian(), continuous)
         self.check_invariance(bayesNet.at(0).asGaussian(), values)
         self.check_invariance(bayesNet.at(0), values)
-        
+
         self.check_invariance(bayesNet.at(1), values)
 
         self.check_invariance(bayesNet.at(2).asDiscrete(), discrete)
@@ -89,7 +89,7 @@ class TestHybridBayesNet(GtsamTestCase):
         self.assertTrue(probability >= 0.0)
         logProb = conditional.logProbability(values)
         self.assertAlmostEqual(probability, np.exp(logProb))
-        expected = conditional.logNormalizationConstant() - conditional.error(values)
+        expected = -(conditional.negLogConstant() + conditional.error(values))
         self.assertAlmostEqual(logProb, expected)
 
 

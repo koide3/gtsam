@@ -25,6 +25,9 @@ public:
   typedef typename POSE::Translation Translation;
   typedef typename POSE::Rotation Rotation;
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   GTSAM_CONCEPT_POSE_TYPE(Pose)
   GTSAM_CONCEPT_GROUP_TYPE(Pose)
   GTSAM_CONCEPT_LIE_TYPE(Rotation)
@@ -54,7 +57,7 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this))); }
 
   // access
@@ -75,7 +78,7 @@ public:
   }
 
   /** h(x)-z */
-  Vector evaluateError(const Pose& pose, boost::optional<Matrix&> H = boost::none) const override {
+  Vector evaluateError(const Pose& pose, OptionalMatrixType H) const override {
     const Rotation& newR = pose.rotation();
     if (H) {
       *H = Matrix::Zero(rDim, xDim);
@@ -88,6 +91,7 @@ public:
 
 private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template<class ARCHIVE>
@@ -97,6 +101,7 @@ private:
         boost::serialization::base_object<Base>(*this));
     ar & BOOST_SERIALIZATION_NVP(measured_);
   }
+#endif
 };
 
 } // \namespace gtsam

@@ -21,7 +21,9 @@
 #include <gtsam/base/Matrix.h>
 #include <gtsam/base/types.h>
 #include <gtsam/dllexport.h>
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #include <boost/serialization/nvp.hpp>
+#endif
 #include <cassert>
 #include <stdexcept>
 #include <array>
@@ -254,9 +256,14 @@ namespace gtsam {
       full().triangularView<Eigen::Upper>() = xpr.template triangularView<Eigen::Upper>();
     }
 
-    /// Set the entire active matrix zero.
+    /// Set the entire *active* matrix zero.
     void setZero() {
       full().triangularView<Eigen::Upper>().setZero();
+    }
+
+    /// Set entire matrix zero.
+    void setAllZero() {
+      matrix_.setZero();
     }
 
     /// Negate the entire active matrix.
@@ -384,6 +391,7 @@ namespace gtsam {
     template<typename SymmetricBlockMatrixType> friend class SymmetricBlockMatrixBlockExpr;
 
   private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
@@ -396,6 +404,7 @@ namespace gtsam {
       ar & BOOST_SERIALIZATION_NVP(variableColOffsets_);
       ar & BOOST_SERIALIZATION_NVP(blockStart_);
     }
+#endif
   };
 
   /// Foward declare exception class

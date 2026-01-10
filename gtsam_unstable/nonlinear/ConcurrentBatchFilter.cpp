@@ -21,6 +21,8 @@
 #include <gtsam/base/timing.h>
 #include <gtsam/base/debug.h>
 
+#include <cassert>
+
 namespace gtsam {
 
 /* ************************************************************************* */
@@ -28,7 +30,7 @@ void ConcurrentBatchFilter::PrintNonlinearFactor(const NonlinearFactor::shared_p
     const std::string& indent, const KeyFormatter& keyFormatter) {
   std::cout << indent;
   if(factor) {
-    if(boost::dynamic_pointer_cast<LinearContainerFactor>(factor)) {
+    if(std::dynamic_pointer_cast<LinearContainerFactor>(factor)) {
       std::cout << "l( ";
     } else {
       std::cout << "f( ";
@@ -65,8 +67,8 @@ void ConcurrentBatchFilter::PrintLinearFactor(const GaussianFactor::shared_ptr& 
     const std::string& indent, const KeyFormatter& keyFormatter) {
   std::cout << indent;
   if(factor) {
-    JacobianFactor::shared_ptr jf = boost::dynamic_pointer_cast<JacobianFactor>(factor);
-    HessianFactor::shared_ptr hf = boost::dynamic_pointer_cast<HessianFactor>(factor);
+    JacobianFactor::shared_ptr jf = std::dynamic_pointer_cast<JacobianFactor>(factor);
+    HessianFactor::shared_ptr hf = std::dynamic_pointer_cast<HessianFactor>(factor);
     if(jf) {
       std::cout << "j( ";
     } else if(hf) {
@@ -119,7 +121,7 @@ bool ConcurrentBatchFilter::equals(const ConcurrentFilter& rhs, double tol) cons
 
 /* ************************************************************************* */
 ConcurrentBatchFilter::Result ConcurrentBatchFilter::update(const NonlinearFactorGraph& newFactors, const Values& newTheta,
-    const boost::optional<FastList<Key> >& keysToMove, const boost::optional< std::vector<size_t> >& removeFactorIndices) {
+    const std::optional<FastList<Key> >& keysToMove, const std::optional< std::vector<size_t> >& removeFactorIndices) {
 
   gttic(update);
 
@@ -355,7 +357,7 @@ void ConcurrentBatchFilter::removeFactors(const std::vector<size_t>& slots) {
 }
 
 /* ************************************************************************* */
-void ConcurrentBatchFilter::reorder(const boost::optional<FastList<Key> >& keysToMove) {
+void ConcurrentBatchFilter::reorder(const std::optional<FastList<Key> >& keysToMove) {
 
   // COLAMD groups will be used to place marginalize keys in Group 0, and everything else in Group 1
   if(keysToMove && keysToMove->size() > 0) {

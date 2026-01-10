@@ -24,7 +24,6 @@
 
 #include <gtsam/geometry/Rot3.h>
 #include <gtsam/geometry/SO3.h>
-#include <boost/math/constants/constants.hpp>
 #include <cmath>
 
 using namespace std;
@@ -154,7 +153,11 @@ Point3 Rot3::rotate(const Point3& p,
 }
 
 /* ************************************************************************* */
-// Log map at identity - return the canonical coordinates of this rotation
+Rot3 Rot3::Expmap(const Vector3& v, OptionalJacobian<3,3> H) {
+  return Rot3(SO3::Expmap(v, H));
+}
+      
+/* ************************************************************************* */
 Vector3 Rot3::Logmap(const Rot3& R, OptionalJacobian<3,3> H) {
   return SO3::Logmap(R.rot_,H);
 }

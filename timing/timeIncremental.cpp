@@ -27,7 +27,6 @@
 #include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
 #include <boost/serialization/export.hpp>
-#include <boost/range/adaptor/reversed.hpp>
 
 using namespace std;
 using namespace gtsam;
@@ -60,7 +59,7 @@ double chi2_red(const gtsam::NonlinearFactorGraph& graph, const gtsam::Values& c
   // the factor graph already includes a factor for the prior/equality constraint.
   //  double dof = graph.size() - config.size();
   int graph_dim = 0;
-  for(const boost::shared_ptr<gtsam::NonlinearFactor>& nlf: graph) {
+  for(const std::shared_ptr<gtsam::NonlinearFactor>& nlf: graph) {
     graph_dim += nlf->dim();
   }
   double dof = graph_dim - config.dim(); // kaess: changed to dim
@@ -104,7 +103,7 @@ int main(int argc, char *argv[]) {
       NonlinearFactor::shared_ptr measurementf = measurements[nextMeasurement];
 
       if(BetweenFactor<Pose>::shared_ptr measurement =
-        boost::dynamic_pointer_cast<BetweenFactor<Pose> >(measurementf))
+        std::dynamic_pointer_cast<BetweenFactor<Pose> >(measurementf))
       {
         // Stop collecting measurements that are for future steps
         if(measurement->key<1>() > step || measurement->key<2>() > step)
@@ -137,7 +136,7 @@ int main(int argc, char *argv[]) {
         }
       }
       else if(BearingRangeFactor<Pose, Point2>::shared_ptr measurement =
-        boost::dynamic_pointer_cast<BearingRangeFactor<Pose, Point2> >(measurementf))
+        std::dynamic_pointer_cast<BearingRangeFactor<Pose, Point2> >(measurementf))
       {
         Key poseKey = measurement->keys()[0], lmKey = measurement->keys()[1];
 
@@ -225,9 +224,14 @@ int main(int argc, char *argv[]) {
   try {
     Marginals marginals(graph, values);
     int i=0;
-    for (Key key1: boost::adaptors::reverse(values.keys())) {
+    // Assign the keyvector to a named variable
+    auto keys = values.keys();
+    // Iterate over it in reverse
+    for (auto it1 = keys.rbegin(); it1 != keys.rend(); ++it1) {
+      Key key1 = *it1;
       int j=0;
-      for (Key key2: boost::adaptors::reverse(values.keys())) {
+      for (auto it2 = keys.rbegin(); it2 != keys.rend(); ++it2) {
+        Key key2 = *it2;
         if(i != j) {
           gttic_(jointMarginalInformation);
           KeyVector keys(2);

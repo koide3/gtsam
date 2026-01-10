@@ -74,9 +74,10 @@ class GTSAM_EXPORT Similarity2 : public LieGroup<Similarity2, 4> {
   bool operator==(const Similarity2& other) const;
 
   /// Print with optional string
-  void print(const std::string& s) const;
+  void print(const std::string& s = "") const;
 
-  friend std::ostream& operator<<(std::ostream& os, const Similarity2& p);
+  GTSAM_EXPORT friend std::ostream& operator<<(std::ostream& os,
+                                               const Similarity2& p);
 
   /// @}
   /// @name Group
@@ -138,25 +139,30 @@ class GTSAM_EXPORT Similarity2 : public LieGroup<Similarity2, 4> {
   /// @name Lie Group
   /// @{
 
+  using LieAlgebra = Matrix3;
+
+  /// Calculate expmap and logmap coefficients.
+  static Matrix2 GetV(double theta, double lambda);
+
   /**
    * Log map at the identity
    * \f$ [t_x, t_y, \delta, \lambda] \f$
    */
   static Vector4 Logmap(const Similarity2& S,  //
-                        OptionalJacobian<4, 4> Hm = boost::none);
+                        OptionalJacobian<4, 4> Hm = {});
 
   /// Exponential map at the identity
   static Similarity2 Expmap(const Vector4& v,  //
-                            OptionalJacobian<4, 4> Hm = boost::none);
+                            OptionalJacobian<4, 4> Hm = {});
 
   /// Chart at the origin
   struct ChartAtOrigin {
     static Similarity2 Retract(const Vector4& v,
-                               ChartJacobian H = boost::none) {
+                               ChartJacobian H = {}) {
       return Similarity2::Expmap(v, H);
     }
     static Vector4 Local(const Similarity2& other,
-                         ChartJacobian H = boost::none) {
+                         ChartJacobian H = {}) {
       return Similarity2::Logmap(other, H);
     }
   };
@@ -165,6 +171,12 @@ class GTSAM_EXPORT Similarity2 : public LieGroup<Similarity2, 4> {
   Matrix4 AdjointMap() const;
 
   using LieGroup<Similarity2, 4>::inverse;
+
+  /// Hat maps from tangent vector to Lie algebra
+  static Matrix3 Hat(const Vector4& xi);
+
+  /// Vee maps from Lie algebra to tangent vector
+  static Vector4 Vee(const Matrix3& X);
 
   /// @}
   /// @name Standard interface
@@ -188,13 +200,26 @@ class GTSAM_EXPORT Similarity2 : public LieGroup<Similarity2, 4> {
   /// Dimensionality of tangent space = 4 DOF
   inline size_t dim() const { return 4; }
 
+ private:
+
+  #if GTSAM_ENABLE_BOOST_SERIALIZATION
+    /** Serialization function */
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int /*version*/) {
+      ar & BOOST_SERIALIZATION_NVP(R_);
+      ar & BOOST_SERIALIZATION_NVP(t_);
+      ar & BOOST_SERIALIZATION_NVP(s_);
+    }
+  #endif
+
   /// @}
 };
 
 template <>
-struct traits<Similarity2> : public internal::LieGroup<Similarity2> {};
+struct traits<Similarity2> : public internal::MatrixLieGroup<Similarity2> {};
 
 template <>
-struct traits<const Similarity2> : public internal::LieGroup<Similarity2> {};
+struct traits<const Similarity2> : public internal::MatrixLieGroup<Similarity2> {};
 
 }  // namespace gtsam

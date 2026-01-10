@@ -58,6 +58,10 @@ inline Pose3_ transformPoseTo(const Pose3_& p, const Pose3_& q) {
   return Pose3_(p, &Pose3::transformPoseTo, q);
 }
 
+inline Pose3_ interpolateRt(const Pose3_& p, const Pose3_& q, const Double_& t) {
+  return Pose3_(&Pose3::interpolateRt, p, q, t);
+}
+
 inline Point3_ normalize(const Point3_& a){
   Point3 (*f)(const Point3 &, OptionalJacobian<3, 3>) = &normalize;
   return Point3_(f, a);
@@ -155,10 +159,10 @@ Point2_ project2(const Expression<CAMERA>& camera_, const Expression<POINT>& p_)
 namespace internal {
 // Helper template for project3 expression below
 template <class CALIBRATION, class POINT>
-inline Point2 project6(const Pose3& x, const Point3& p, const Cal3_S2& K,
+inline Point2 project6(const Pose3& x, const POINT& p, const CALIBRATION& K,
                        OptionalJacobian<2, 6> Dpose, OptionalJacobian<2, 3> Dpoint,
-                       OptionalJacobian<2, 5> Dcal) {
-  return PinholeCamera<Cal3_S2>(x, K).project(p, Dpose, Dpoint, Dcal);
+                       OptionalJacobian<2, CALIBRATION::dimension> Dcal) {
+  return PinholeCamera<CALIBRATION>(x, K).project(p, Dpose, Dpoint, Dcal);
 }
 }
 
@@ -193,6 +197,16 @@ gtsam::Expression<typename gtsam::traits<T>::TangentVector> logmap(
     const gtsam::Expression<T> &x1, const gtsam::Expression<T> &x2) {
   return Expression<typename gtsam::traits<T>::TangentVector>(
       gtsam::traits<T>::Logmap, between(x1, x2));
+}
+
+template <typename T>
+inline Expression<T> interpolate(const Expression<T>& p, const Expression<T>& q,
+                                 const Expression<double>& t){
+  T (*f)(const T&, const T&, double,
+         typename MakeOptionalJacobian<T, T>::type,
+         typename MakeOptionalJacobian<T, T>::type,
+         typename MakeOptionalJacobian<T, double>::type) = &interpolate;
+  return Expression<T>(f, p, q, t);
 }
 
 }  // \namespace gtsam

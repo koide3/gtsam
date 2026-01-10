@@ -36,13 +36,13 @@ namespace {
   const Key x1=1, x2=2, x3=3, x4=4;
   const SharedDiagonal chainNoise = noiseModel::Isotropic::Sigma(1, 0.5);
   const GaussianFactorGraph chain = {
-      boost::make_shared<JacobianFactor>(
+      std::make_shared<JacobianFactor>(
           x2, I_1x1, x1, I_1x1, (Vector(1) << 1.).finished(), chainNoise),
-      boost::make_shared<JacobianFactor>(
+      std::make_shared<JacobianFactor>(
           x2, I_1x1, x3, I_1x1, (Vector(1) << 1.).finished(), chainNoise),
-      boost::make_shared<JacobianFactor>(
+      std::make_shared<JacobianFactor>(
           x3, I_1x1, x4, I_1x1, (Vector(1) << 1.).finished(), chainNoise),
-      boost::make_shared<JacobianFactor>(
+      std::make_shared<JacobianFactor>(
           x4, I_1x1, (Vector(1) << 1.).finished(), chainNoise)};
   const Ordering chainOrdering {x2, x1, x3, x4};
 
@@ -50,8 +50,8 @@ namespace {
   // Helper functions for below
   GaussianBayesTreeClique::shared_ptr LeafClique(const GaussianConditional& conditional)
   {
-    return boost::make_shared<GaussianBayesTreeClique>(
-      boost::make_shared<GaussianConditional>(conditional));
+    return std::make_shared<GaussianBayesTreeClique>(
+      std::make_shared<GaussianConditional>(conditional));
   }
 
   typedef std::vector<GaussianBayesTreeClique::shared_ptr> Children;
@@ -299,13 +299,13 @@ TEST(GaussianBayesTree, determinant_and_smallestEigenvalue) {
   GaussianFactorGraph fg;
   Key x1 = 2, x2 = 0, l1 = 1;
   SharedDiagonal unit2 = noiseModel::Unit::Create(2);
-  fg += JacobianFactor(x1, 10 * I_2x2, -1.0 * Vector::Ones(2), unit2);
-  fg += JacobianFactor(x2, 10 * I_2x2, x1, -10 * I_2x2, Vector2(2.0, -1.0), unit2);
-  fg += JacobianFactor(l1, 5 * I_2x2, x1, -5 * I_2x2, Vector2(0.0, 1.0), unit2);
-  fg += JacobianFactor(x2, -5 * I_2x2, l1, 5 * I_2x2, Vector2(-1.0, 1.5), unit2);
+  fg.emplace_shared<JacobianFactor>(x1, 10 * I_2x2, -1.0 * Vector::Ones(2), unit2);
+  fg.emplace_shared<JacobianFactor>(x2, 10 * I_2x2, x1, -10 * I_2x2, Vector2(2.0, -1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(l1, 5 * I_2x2, x1, -5 * I_2x2, Vector2(0.0, 1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(x2, -5 * I_2x2, l1, 5 * I_2x2, Vector2(-1.0, 1.5), unit2);
 
   // create corresponding Bayes tree:
-  boost::shared_ptr<gtsam::GaussianBayesTree> bt = fg.eliminateMultifrontal();
+  std::shared_ptr<gtsam::GaussianBayesTree> bt = fg.eliminateMultifrontal();
   Matrix H = fg.hessian().first;
 
   // test determinant
@@ -327,19 +327,18 @@ TEST(GaussianBayesTree, LogDeterminant) {
   GaussianFactorGraph fg;
   Key x1 = X(1), x2 = X(2), l1 = L(1);
   SharedDiagonal unit2 = noiseModel::Unit::Create(2);
-  fg += JacobianFactor(x1, 10 * I_2x2, -1.0 * Vector2::Ones(), unit2);
-  fg += JacobianFactor(x2, 10 * I_2x2, x1, -10 * I_2x2, Vector2(2.0, -1.0),
-                       unit2);
-  fg += JacobianFactor(l1, 5 * I_2x2, x1, -5 * I_2x2, Vector2(0.0, 1.0), unit2);
-  fg +=
-      JacobianFactor(x2, -5 * I_2x2, l1, 5 * I_2x2, Vector2(-1.0, 1.5), unit2);
-  fg += JacobianFactor(x3, 10 * I_2x2, x2, -10 * I_2x2, Vector2(2.0, -1.0),
-                       unit2);
-  fg += JacobianFactor(x3, 10 * I_2x2, -1.0 * Vector2::Ones(), unit2);
+  fg.emplace_shared<JacobianFactor>(x1, 10 * I_2x2, -1.0 * Vector2::Ones(), unit2);
+  fg.emplace_shared<JacobianFactor>(x2, 10 * I_2x2, x1, -10 * I_2x2,
+                                    Vector2(2.0, -1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(l1, 5 * I_2x2, x1, -5 * I_2x2, Vector2(0.0, 1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(x2, -5 * I_2x2, l1, 5 * I_2x2, Vector2(-1.0, 1.5), unit2);
+  fg.emplace_shared<JacobianFactor>(x3, 10 * I_2x2, x2, -10 * I_2x2,
+                                    Vector2(2.0, -1.0), unit2);
+  fg.emplace_shared<JacobianFactor>(x3, 10 * I_2x2, -1.0 * Vector2::Ones(), unit2);
 
   // create corresponding Bayes net and Bayes tree:
-  boost::shared_ptr<gtsam::GaussianBayesNet> bn = fg.eliminateSequential();
-  boost::shared_ptr<gtsam::GaussianBayesTree> bt = fg.eliminateMultifrontal();
+  std::shared_ptr<gtsam::GaussianBayesNet> bn = fg.eliminateSequential();
+  std::shared_ptr<gtsam::GaussianBayesTree> bt = fg.eliminateMultifrontal();
 
   // Test logDeterminant
   EXPECT_DOUBLES_EQUAL(bn->logDeterminant(), bt->logDeterminant(), 1e-9);

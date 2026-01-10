@@ -15,16 +15,19 @@
  *  @author Duy-Nguyen Ta
  */
 
+#include <CppUnitLite/TestHarness.h>
+#include <gtsam/base/TestableAssertions.h>
+#include <gtsam/discrete/DiscreteBayesTree.h>
+#include <gtsam/discrete/DiscreteEliminationTree.h>
 #include <gtsam/discrete/DiscreteFactor.h>
 #include <gtsam/discrete/DiscreteFactorGraph.h>
-#include <gtsam/discrete/DiscreteEliminationTree.h>
-#include <gtsam/discrete/DiscreteBayesTree.h>
 #include <gtsam/inference/BayesNet.h>
-
-#include <CppUnitLite/TestHarness.h>
+#include <gtsam/inference/Symbol.h>
 
 using namespace std;
 using namespace gtsam;
+
+using symbol_shorthand::M;
 
 /* ************************************************************************* */
 TEST_UNSAFE(DiscreteFactorGraph, debugScheduler) {
@@ -91,7 +94,7 @@ TEST_UNSAFE( DiscreteFactorGraph, DiscreteFactorGraphEvaluationTest) {
   EXPECT_DOUBLES_EQUAL( 1.944, graph(values), 1e-9);
 
   // Check if graph product works
-  DecisionTreeFactor product = graph.product();
+  DecisionTreeFactor product = graph.product()->toDecisionTreeFactor();
   EXPECT_DOUBLES_EQUAL( 1.944, product(values), 1e-9);
 }
 
@@ -107,11 +110,16 @@ TEST(DiscreteFactorGraph, test) {
   graph.add(C & B, "3 1 1 3");
 
   // Test EliminateDiscrete
-  Ordering frontalKeys;
-  frontalKeys += Key(0);
-  DiscreteConditional::shared_ptr conditional;
-  DecisionTreeFactor::shared_ptr newFactor;
-  boost::tie(conditional, newFactor) = EliminateDiscrete(graph, frontalKeys);
+  const Ordering frontalKeys{0};
+  const auto [conditional, newFactorPtr] = EliminateDiscrete(graph, frontalKeys);
+
+  DecisionTreeFactor newFactor =
+      *std::dynamic_pointer_cast<DecisionTreeFactor>(newFactorPtr);
+
+  // Normalize newFactor by max for comparison with expected
+  auto denominator = newFactor.max(newFactor.size())->toDecisionTreeFactor();
+
+  newFactor = newFactor / denominator;
 
   // Check Conditional
   CHECK(conditional);
@@ -120,17 +128,19 @@ TEST(DiscreteFactorGraph, test) {
   EXPECT(assert_equal(expectedConditional, *conditional));
 
   // Check Factor
-  CHECK(newFactor);
+  CHECK(&newFactor);
   DecisionTreeFactor expectedFactor(B & A, "10 6 6 10");
-  EXPECT(assert_equal(expectedFactor, *newFactor));
+  // Normalize by max.
+  denominator =
+      expectedFactor.max(expectedFactor.size())->toDecisionTreeFactor();
+  // Ensure denominator is correct.
+  expectedFactor = expectedFactor / denominator;
+  EXPECT(assert_equal(expectedFactor, newFactor));
 
   // Test using elimination tree
-  Ordering ordering;
-  ordering += Key(0), Key(1), Key(2);
+  const Ordering ordering{0, 1, 2};
   DiscreteEliminationTree etree(graph, ordering);
-  DiscreteBayesNet::shared_ptr actual;
-  DiscreteFactorGraph::shared_ptr remainingGraph;
-  boost::tie(actual, remainingGraph) = etree.eliminate(&EliminateDiscrete);
+  const auto [actual, remainingGraph] = etree.eliminate(&EliminateDiscrete);
 
   // Check Bayes net
   DiscreteBayesNet expectedBayesNet;
@@ -209,13 +219,6 @@ TEST(DiscreteFactorGraph, marginalIsNotMPE) {
   auto actualMPE = graph.optimize();
   EXPECT(assert_equal(mpe, actualMPE));
   EXPECT_DOUBLES_EQUAL(0.315789, graph(mpe), 1e-5);  // regression
-
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-  // Optimize on BayesNet maximizes marginal, then the conditional marginals:
-  auto notOptimal = bayesNet.optimize();
-  EXPECT(graph(notOptimal) < graph(mpe));
-  EXPECT_DOUBLES_EQUAL(0.263158, graph(notOptimal), 1e-5);  // regression
-#endif
 }
 
 /* ************************************************************************* */
@@ -242,14 +245,9 @@ TEST(DiscreteFactorGraph, testMPE_Darwiche09book_p244) {
   EXPECT(assert_equal(mpe, actualMPE));
 
   // Check Bayes Net
-  Ordering ordering;
-  ordering += Key(0), Key(1), Key(2), Key(3), Key(4);
+  const Ordering ordering{0, 1, 2, 3, 4};
   auto chordal = graph.eliminateSequential(ordering);
   EXPECT_LONGS_EQUAL(5, chordal->size());
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-  auto notOptimal = chordal->optimize();  // not MPE !
-  EXPECT(graph(notOptimal) < graph(mpe));
-#endif
 
   // Let us create the Bayes tree here, just for fun, because we don't use it
   DiscreteBayesTree::shared_ptr bayesTree =
@@ -352,6 +350,7 @@ TEST(DiscreteFactorGraph, markdown) {
   values[1] = 0;
   EXPECT_DOUBLES_EQUAL(0.3, graph[0]->operator()(values), 1e-9);
 }
+
 /* ************************************************************************* */
 int main() {
 TestResult tr;

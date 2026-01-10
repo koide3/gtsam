@@ -36,7 +36,7 @@ int main(const int argc, const char *argv[]) {
   NonlinearFactorGraph::shared_ptr graph;
   Values::shared_ptr initial;
   bool is3D = true;
-  boost::tie(graph, initial) = readG2o(g2oFile, is3D);
+  std::tie(graph, initial) = readG2o(g2oFile, is3D);
 
   bool add = false;
   Key firstKey = 8646911284551352320;
@@ -65,9 +65,9 @@ int main(const int argc, const char *argv[]) {
       simpleInitial.insert(key, initial->at(k));
     }
     NonlinearFactorGraph simpleGraph;
-    for(const boost::shared_ptr<NonlinearFactor>& factor: *graph) {
-      boost::shared_ptr<BetweenFactor<Pose3> > pose3Between =
-          boost::dynamic_pointer_cast<BetweenFactor<Pose3> >(factor);
+    for(const std::shared_ptr<NonlinearFactor>& factor: *graph) {
+      std::shared_ptr<BetweenFactor<Pose3> > pose3Between =
+          std::dynamic_pointer_cast<BetweenFactor<Pose3> >(factor);
       if (pose3Between){
         Key key1, key2;
         if(add){

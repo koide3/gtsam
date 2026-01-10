@@ -34,9 +34,9 @@ def main():
         help="Name of the output pybind .cc file(s)",
     )
     arg_parser.add_argument(
-        "--use-boost",
+        "--use-boost-serialization",
         action="store_true",
-        help="using boost's shared_ptr instead of std's",
+        help="Allow boost based serialization methods",
     )
     arg_parser.add_argument(
         "--top_module_namespaces",
@@ -64,21 +64,26 @@ def main():
     arg_parser.add_argument("--is_submodule",
                             default=False,
                             action="store_true")
+    arg_parser.add_argument("--xml_source",
+                            type=str,
+                            default="",
+                            help="The path to the Doxygen-generated XML documentation")
     args = arg_parser.parse_args()
 
     top_module_namespaces = args.top_module_namespaces.split("::")
     if top_module_namespaces[0]:
         top_module_namespaces = [''] + top_module_namespaces
 
-    with open(args.template, "r") as f:
+    with open(args.template, "r", encoding="UTF-8") as f:
         template_content = f.read()
 
     wrapper = PybindWrapper(
         module_name=args.module_name,
-        use_boost=args.use_boost,
+        use_boost_serialization=args.use_boost_serialization,
         top_module_namespaces=top_module_namespaces,
         ignore_classes=args.ignore,
         module_template=template_content,
+        xml_source=args.xml_source,
     )
 
     if args.is_submodule:

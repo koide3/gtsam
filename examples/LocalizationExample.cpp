@@ -71,8 +71,12 @@ class UnaryFactor: public NoiseModelFactorN<Pose2> {
   double mx_, my_;
 
  public:
+
+  // Provide access to Matrix& version of evaluateError:
+  using NoiseModelFactor1<Pose2>::evaluateError;
+
   /// shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<UnaryFactor> shared_ptr;
+  typedef std::shared_ptr<UnaryFactor> shared_ptr;
 
   // The constructor requires the variable key, the (X, Y) measurement value, and the noise model
   UnaryFactor(Key j, double x, double y, const SharedNoiseModel& model):
@@ -84,7 +88,7 @@ class UnaryFactor: public NoiseModelFactorN<Pose2> {
   // The first is the 'evaluateError' function. This function implements the desired measurement
   // function, returning a vector of errors when evaluated at the provided variable value. It
   // must also calculate the Jacobians for this measurement function, if requested.
-  Vector evaluateError(const Pose2& q, boost::optional<Matrix&> H = boost::none) const override {
+  Vector evaluateError(const Pose2& q, OptionalMatrixType H) const override {
     // The measurement function for a GPS-like measurement h(q) which predicts the measurement (m) is h(q) = q, q = [qx qy qtheta]
     // The error is then simply calculated as E(q) = h(q) - m:
     // error_x = q.x - mx
@@ -101,7 +105,7 @@ class UnaryFactor: public NoiseModelFactorN<Pose2> {
   // circumstances, the following code that employs the default copy constructor should
   // work fine.
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new UnaryFactor(*this))); }
 
   // Additionally, we encourage you the use of unit testing your custom factors,

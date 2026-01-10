@@ -20,14 +20,18 @@
 
 #include <gtsam/base/Testable.h>
 #include <gtsam/base/Matrix.h>
+#include <gtsam/base/std_optional_serialization.h>
 #include <gtsam/dllexport.h>
 #include <gtsam/linear/LossFunctions.h>
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #include <boost/serialization/nvp.hpp>
 #include <boost/serialization/extended_type_info.hpp>
 #include <boost/serialization/singleton.hpp>
 #include <boost/serialization/shared_ptr.hpp>
-#include <boost/serialization/optional.hpp>
+#endif
+
+#include <optional>
 
 namespace gtsam {
 
@@ -53,7 +57,7 @@ namespace gtsam {
     class GTSAM_EXPORT Base {
 
     public:
-      typedef boost::shared_ptr<Base> shared_ptr;
+      typedef std::shared_ptr<Base> shared_ptr;
 
     protected:
 
@@ -137,12 +141,14 @@ namespace gtsam {
       virtual double weight(const Vector& v) const { return 1.0; }
 
     private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
       /** Serialization function */
       friend class boost::serialization::access;
       template<class ARCHIVE>
       void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
         ar & BOOST_SERIALIZATION_NVP(dim_);
       }
+#endif
     };
 
     //---------------------------------------------------------------------------------------
@@ -164,7 +170,7 @@ namespace gtsam {
     protected:
 
       /** Matrix square root of information matrix (R) */
-      boost::optional<Matrix> sqrt_information_;
+      std::optional<Matrix> sqrt_information_;
 
     private:
 
@@ -177,14 +183,16 @@ namespace gtsam {
         return *sqrt_information_;
       }
 
+      /// Compute the log of |R|. Used for computing log(|Σ|)
+      virtual double logDetR() const;
 
     public:
 
-      typedef boost::shared_ptr<Gaussian> shared_ptr;
+      typedef std::shared_ptr<Gaussian> shared_ptr;
 
       /** constructor takes square root information matrix */
       Gaussian(size_t dim = 1,
-               const boost::optional<Matrix>& sqrt_information = boost::none)
+               const std::optional<Matrix>& sqrt_information = {})
           : Base(dim), sqrt_information_(sqrt_information) {}
 
       ~Gaussian() override {}
@@ -249,7 +257,7 @@ namespace gtsam {
        * @param Ab is the m*(n+1) augmented system matrix [A b]
        * @return Empty SharedDiagonal() noise model: R,d are whitened
        */
-      virtual boost::shared_ptr<Diagonal> QR(Matrix& Ab) const;
+      virtual std::shared_ptr<Diagonal> QR(Matrix& Ab) const;
 
       /// Return R itself, but note that Whiten(H) is cheaper than R*H
       virtual Matrix R() const { return thisR();}
@@ -260,7 +268,19 @@ namespace gtsam {
       /// Compute covariance matrix
       virtual Matrix covariance() const;
 
-    private:
+      /// Compute the log of |Σ|
+      double logDeterminant() const;
+
+      /**
+       * @brief Compute the negative log of the normalization constant
+       * for a Gaussian noise model k = 1/\sqrt(|2πΣ|).
+       * 
+       * @return double 
+       */
+      double negLogConstant() const;
+
+     private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
       /** Serialization function */
       friend class boost::serialization::access;
       template<class ARCHIVE>
@@ -268,7 +288,7 @@ namespace gtsam {
         ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(Base);
         ar & BOOST_SERIALIZATION_NVP(sqrt_information_);
       }
-
+#endif
     }; // Gaussian
 
     //---------------------------------------------------------------------------------------
@@ -288,16 +308,17 @@ namespace gtsam {
        */
       Vector sigmas_, invsigmas_, precisions_;
 
-    protected:
-
       /** constructor to allow for disabling initialization of invsigmas */
       Diagonal(const Vector& sigmas);
+
+      /// Compute the log of |R|. Used for computing log(|Σ|)
+      virtual double logDetR() const override;
 
     public:
       /** constructor - no initializations, for serialization */
       Diagonal();
 
-      typedef boost::shared_ptr<Diagonal> shared_ptr;
+      typedef std::shared_ptr<Diagonal> shared_ptr;
 
       ~Diagonal() override {}
 
@@ -354,6 +375,7 @@ namespace gtsam {
       }
 
     private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
       /** Serialization function */
       friend class boost::serialization::access;
       template<class ARCHIVE>
@@ -362,6 +384,7 @@ namespace gtsam {
         ar & BOOST_SERIALIZATION_NVP(sigmas_);
         ar & BOOST_SERIALIZATION_NVP(invsigmas_);
       }
+#endif
     }; // Diagonal
 
     //---------------------------------------------------------------------------------------
@@ -393,7 +416,7 @@ namespace gtsam {
 
     public:
 
-      typedef boost::shared_ptr<Constrained> shared_ptr;
+      typedef std::shared_ptr<Constrained> shared_ptr;
 
       /**
        * protected constructor takes sigmas.
@@ -497,6 +520,7 @@ namespace gtsam {
       shared_ptr unit() const;
 
     private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
       /** Serialization function */
       friend class boost::serialization::access;
       template<class ARCHIVE>
@@ -504,6 +528,7 @@ namespace gtsam {
         ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(Diagonal);
         ar & BOOST_SERIALIZATION_NVP(mu_);
       }
+#endif
 
     }; // Constrained
 
@@ -521,6 +546,9 @@ namespace gtsam {
       Isotropic(size_t dim, double sigma) :
         Diagonal(Vector::Constant(dim, sigma)),sigma_(sigma),invsigma_(1.0/sigma) {}
 
+      /// Compute the log of |R|. Used for computing log(|Σ|)
+      virtual double logDetR() const override;
+
     public:
 
       /* dummy constructor to allow for serialization */
@@ -528,7 +556,7 @@ namespace gtsam {
 
       ~Isotropic() override {}
 
-      typedef boost::shared_ptr<Isotropic> shared_ptr;
+      typedef std::shared_ptr<Isotropic> shared_ptr;
 
       /**
        * An isotropic noise model created by specifying a standard devation sigma
@@ -565,6 +593,7 @@ namespace gtsam {
       inline double sigma() const { return sigma_; }
 
     private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
       /** Serialization function */
       friend class boost::serialization::access;
       template<class ARCHIVE>
@@ -573,6 +602,7 @@ namespace gtsam {
         ar & BOOST_SERIALIZATION_NVP(sigma_);
         ar & BOOST_SERIALIZATION_NVP(invsigma_);
       }
+#endif
 
     };
 
@@ -582,9 +612,13 @@ namespace gtsam {
      * Unit: i.i.d. unit-variance noise on all m dimensions.
      */
     class GTSAM_EXPORT Unit : public Isotropic {
+    protected:
+      /// Compute the log of |R|. Used for computing log(|Σ|)
+      virtual double logDetR() const override;
+
     public:
 
-      typedef boost::shared_ptr<Unit> shared_ptr;
+      typedef std::shared_ptr<Unit> shared_ptr;
 
       /** constructor for serialization */
       Unit(size_t dim=1): Isotropic(dim,1.0) {}
@@ -614,12 +648,14 @@ namespace gtsam {
       void unwhitenInPlace(Eigen::Block<Vector>& /*v*/) const override {}
 
     private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
       /** Serialization function */
       friend class boost::serialization::access;
       template<class ARCHIVE>
       void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
         ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(Isotropic);
       }
+#endif
     };
 
     /**
@@ -641,7 +677,7 @@ namespace gtsam {
      */
     class GTSAM_EXPORT Robust : public Base {
     public:
-      typedef boost::shared_ptr<Robust> shared_ptr;
+      typedef std::shared_ptr<Robust> shared_ptr;
 
     protected:
       typedef mEstimator::Base RobustModel;
@@ -653,7 +689,7 @@ namespace gtsam {
     public:
 
       /// Default Constructor for serialization
-      Robust() {};
+      Robust() {}
 
       /// Constructor
       Robust(const RobustModel::shared_ptr robust, const NoiseModel::shared_ptr noise)
@@ -703,6 +739,7 @@ namespace gtsam {
         const RobustModel::shared_ptr &robust, const NoiseModel::shared_ptr noise);
 
     private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
       /** Serialization function */
       friend class boost::serialization::access;
       template<class ARCHIVE>
@@ -711,10 +748,11 @@ namespace gtsam {
         ar & boost::serialization::make_nvp("robust_", const_cast<RobustModel::shared_ptr&>(robust_));
         ar & boost::serialization::make_nvp("noise_", const_cast<NoiseModel::shared_ptr&>(noise_));
       }
+#endif
     };
 
     // Helper function
-    GTSAM_EXPORT boost::optional<Vector> checkIfDiagonal(const Matrix& M);
+    GTSAM_EXPORT std::optional<Vector> checkIfDiagonal(const Matrix& M);
 
   } // namespace noiseModel
 

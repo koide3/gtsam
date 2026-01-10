@@ -24,10 +24,8 @@
 #include <gtsam/base/types.h>
 #include <gtsam/base/Vector.h>
 
-#include <boost/algorithm/string.hpp>
-#include <boost/range/adaptor/reversed.hpp>
-
 #include <stdexcept>
+#include <cassert>
 
 using std::cout;
 using std::endl;
@@ -82,9 +80,9 @@ static GaussianFactorGraph convertToJacobianFactors(
   GaussianFactorGraph result;
   for (const auto &factor : gfg) 
     if (factor) {
-      auto jf = boost::dynamic_pointer_cast<JacobianFactor>(factor);
+      auto jf = std::dynamic_pointer_cast<JacobianFactor>(factor);
       if (!jf) {
-        jf = boost::make_shared<JacobianFactor>(*factor);
+        jf = std::make_shared<JacobianFactor>(*factor);
       }
       result.push_back(jf);
     }
@@ -205,7 +203,8 @@ void SubgraphPreconditioner::solve(const Vector &y, Vector &x) const {
   assert(x.size() == y.size());
 
   /* back substitute */
-  for (const auto &cg : boost::adaptors::reverse(Rc1_)) {
+  for (auto it = std::make_reverse_iterator(Rc1_.end()); it != std::make_reverse_iterator(Rc1_.begin()); ++it) {
+    auto& cg = *it;
     /* collect a subvector of x that consists of the parents of cg (S) */
     const KeyVector parentKeys(cg->beginParents(), cg->endParents());
     const KeyVector frontalKeys(cg->beginFrontals(), cg->endFrontals());

@@ -17,10 +17,8 @@
  * @date   January, 2023
  */
 
-#include <gtsam/discrete/DecisionTreeFactor.h>
 #include <gtsam/hybrid/HybridFactorGraph.h>
-
-#include <boost/format.hpp>
+#include <gtsam/nonlinear/NonlinearFactor.h>
 
 namespace gtsam {
 
@@ -28,12 +26,11 @@ namespace gtsam {
 std::set<DiscreteKey> HybridFactorGraph::discreteKeys() const {
   std::set<DiscreteKey> keys;
   for (auto& factor : factors_) {
-    if (auto p = boost::dynamic_pointer_cast<DecisionTreeFactor>(factor)) {
+    if (auto p = std::dynamic_pointer_cast<DiscreteFactor>(factor)) {
       for (const DiscreteKey& key : p->discreteKeys()) {
         keys.insert(key);
       }
-    }
-    if (auto p = boost::dynamic_pointer_cast<HybridFactor>(factor)) {
+    } else if (auto p = std::dynamic_pointer_cast<HybridFactor>(factor)) {
       for (const DiscreteKey& key : p->discreteKeys()) {
         keys.insert(key);
       }
@@ -53,22 +50,17 @@ KeySet HybridFactorGraph::discreteKeySet() const {
 }
 
 /* ************************************************************************* */
-std::unordered_map<Key, DiscreteKey> HybridFactorGraph::discreteKeyMap() const {
-  std::unordered_map<Key, DiscreteKey> result;
-  for (const DiscreteKey& k : discreteKeys()) {
-    result[k.first] = k;
-  }
-  return result;
-}
-
-/* ************************************************************************* */
 const KeySet HybridFactorGraph::continuousKeySet() const {
   KeySet keys;
   for (auto& factor : factors_) {
-    if (auto p = boost::dynamic_pointer_cast<HybridFactor>(factor)) {
+    if (auto p = std::dynamic_pointer_cast<HybridFactor>(factor)) {
       for (const Key& key : p->continuousKeys()) {
         keys.insert(key);
       }
+    } else if (auto p = std::dynamic_pointer_cast<GaussianFactor>(factor)) {
+      keys.insert(p->keys().begin(), p->keys().end());
+    } else if (auto p = std::dynamic_pointer_cast<NonlinearFactor>(factor)) {
+      keys.insert(p->keys().begin(), p->keys().end());
     }
   }
   return keys;

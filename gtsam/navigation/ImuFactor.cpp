@@ -23,6 +23,7 @@
 
 /* External or standard includes */
 #include <ostream>
+#include <cassert>
 
 namespace gtsam {
 
@@ -120,7 +121,7 @@ ImuFactor::ImuFactor(Key pose_i, Key vel_i, Key pose_j, Key vel_j, Key bias,
 
 //------------------------------------------------------------------------------
 NonlinearFactor::shared_ptr ImuFactor::clone() const {
-  return boost::static_pointer_cast<NonlinearFactor>(
+  return std::static_pointer_cast<NonlinearFactor>(
       NonlinearFactor::shared_ptr(new This(*this)));
 }
 
@@ -151,9 +152,9 @@ bool ImuFactor::equals(const NonlinearFactor& other, double tol) const {
 //------------------------------------------------------------------------------
 Vector ImuFactor::evaluateError(const Pose3& pose_i, const Vector3& vel_i,
     const Pose3& pose_j, const Vector3& vel_j,
-    const imuBias::ConstantBias& bias_i, boost::optional<Matrix&> H1,
-    boost::optional<Matrix&> H2, boost::optional<Matrix&> H3,
-    boost::optional<Matrix&> H4, boost::optional<Matrix&> H5) const {
+    const imuBias::ConstantBias& bias_i, OptionalMatrixType H1,
+    OptionalMatrixType H2, OptionalMatrixType H3,
+    OptionalMatrixType H4, OptionalMatrixType H5) const {
   return _PIM_.computeErrorAndJacobians(pose_i, vel_i, pose_j, vel_j, bias_i,
       H1, H2, H3, H4, H5);
 }
@@ -195,7 +196,7 @@ ImuFactor::shared_ptr ImuFactor::Merge(const shared_ptr& f01,
   // return new factor
   auto pim02 =
   Merge(f01->preintegratedMeasurements(), f12->preintegratedMeasurements());
-  return boost::make_shared<ImuFactor>(f01->key<1>(),  // P0
+  return std::make_shared<ImuFactor>(f01->key<1>(),  // P0
       f01->key<2>(),  // V0
       f12->key<3>(),  // P2
       f12->key<4>(),  // V2
@@ -215,7 +216,7 @@ ImuFactor2::ImuFactor2(Key state_i, Key state_j, Key bias,
 
 //------------------------------------------------------------------------------
 NonlinearFactor::shared_ptr ImuFactor2::clone() const {
-  return boost::static_pointer_cast<NonlinearFactor>(
+  return std::static_pointer_cast<NonlinearFactor>(
       NonlinearFactor::shared_ptr(new This(*this)));
 }
 
@@ -247,8 +248,8 @@ bool ImuFactor2::equals(const NonlinearFactor& other, double tol) const {
 Vector ImuFactor2::evaluateError(const NavState& state_i,
     const NavState& state_j,
     const imuBias::ConstantBias& bias_i, //
-    boost::optional<Matrix&> H1, boost::optional<Matrix&> H2,
-    boost::optional<Matrix&> H3) const {
+    OptionalMatrixType H1, OptionalMatrixType H2,
+    OptionalMatrixType H3) const {
   return _PIM_.computeError(state_i, state_j, bias_i, H1, H2, H3);
 }
 

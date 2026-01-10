@@ -28,6 +28,7 @@
 #include <list>
 #include <memory>
 #include <sstream>
+#include <cassert>
 
 using namespace std;
 
@@ -50,15 +51,14 @@ namespace gtsam {
 
   /* ************************************************************************* */
   Values::Values(const Values& other, const VectorValues& delta) {
-    for (const auto& key_value : other.values_) {
-      VectorValues::const_iterator it = delta.find(key_value.first);
-      Key key = key_value.first;  // Non-const duplicate to deal with non-const insert argument
+    for (const auto& [key,value] : other.values_) {
+      VectorValues::const_iterator it = delta.find(key);
       if (it != delta.end()) {
         const Vector& v = it->second;
-        Value* retractedValue(key_value.second->retract_(v));  // Retract
-        values_.insert(key, retractedValue);  // Add retracted result directly to result values
+        Value* retractedValue(value->retract_(v));  // Retract
+        values_.emplace(key, retractedValue);  // Add retracted result directly to result values
       } else {
-        values_.insert(key, key_value.second->clone_());  // Add original version to result values
+        values_.emplace(key, value->clone_());  // Add original version to result values
       }
     }
   }
@@ -67,9 +67,9 @@ namespace gtsam {
   void Values::print(const string& str, const KeyFormatter& keyFormatter) const {
     cout << str << (str.empty() ? "" : "\n");
     cout << "Values with " << size() << " values:\n";
-    for (const auto& key_value : values_) {
-      cout << "Value " << keyFormatter(key_value.first) << ": ";
-      key_value.second->print("");
+    for (const auto& [key,value] : values_) {
+      cout << "Value " << keyFormatter(key) << ": ";
+      value->print("");
       cout << "\n";
     }
   }
@@ -80,8 +80,8 @@ namespace gtsam {
       return false;
     for (auto it1 = values_.begin(), it2 = other.values_.begin();
          it1 != values_.end(); ++it1, ++it2) {
-      const Value* value1 = it1->second;
-      const Value* value2 = it2->second;
+      const Value* value1 = it1->second.get();
+      const Value* value2 = it2->second.get();
       if (typeid(*value1) != typeid(*value2) || it1->first != it2->first
           || !value1->equals_(*value2, tol)) {
         return false;
@@ -144,58 +144,48 @@ namespace gtsam {
 
   /* ************************************************************************* */
   const Value& Values::at(Key j) const {
-    // Find the item
-    KeyValueMap::const_iterator item = values_.find(j);
+    KeyValueMap::const_iterator it = values_.find(j);
 
     // Throw exception if it does not exist
-    if(item == values_.end())
+    if(it == values_.end())
       throw ValuesKeyDoesNotExist("retrieve", j);
-    return *item->second;
+    return *it->second;
   }
 
   /* ************************************************************************* */
   void Values::insert(Key j, const Value& val) {
-    auto insertResult = values_.insert(j, val.clone_());
+    auto insertResult = values_.emplace(j, val.clone_());
     if(!insertResult.second)
       throw ValuesKeyAlreadyExists(j);
   }
 
   /* ************************************************************************* */
   void Values::insert(const Values& other) {
-    for (auto key_value = other.values_.begin();
-         key_value != other.values_.end(); ++key_value) {
-      insert(key_value->first, *(key_value->second));
+    for (const auto& [key, value] : other.values_) {
+      insert(key, *(value));
     }
   }
 
   /* ************************************************************************* */
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-  std::pair<Values::iterator, bool> Values::tryInsert(Key j, const Value& value) {
-    std::pair<KeyValueMap::iterator, bool> result = values_.insert(j, value.clone_());
-    return std::make_pair(boost::make_transform_iterator(result.first, &make_deref_pair), result.second);
-  }
-#endif
-
-  /* ************************************************************************* */
   void Values::update(Key j, const Value& val) {
     // Find the value to update
-    KeyValueMap::iterator item = values_.find(j);
-    if (item == values_.end())
+    KeyValueMap::iterator it = values_.find(j);
+    if (it == values_.end())
       throw ValuesKeyDoesNotExist("update", j);
 
     // Cast to the derived type
-    const Value& old_value = *item->second;
+    const Value& old_value = *it->second;
     if (typeid(old_value) != typeid(val))
       throw ValuesIncorrectType(j, typeid(old_value), typeid(val));
 
-    values_.replace(item, val.clone_());
+    values_.erase(j);
+    values_.emplace(j, val.clone_());
   }
 
   /* ************************************************************************* */
   void Values::update(const Values& other) {
-    for (auto key_value = other.values_.begin();
-         key_value != other.values_.end(); ++key_value) {
-      this->update(key_value->first, *(key_value->second));
+    for (auto& [key, value] : other.values_) {
+      this->update(key, *(value));
     }
   }
 
@@ -212,34 +202,33 @@ namespace gtsam {
 
   /* ************************************************************************ */
   void Values::insert_or_assign(const Values& other) {
-    for (auto key_value = other.values_.begin();
-         key_value != other.values_.end(); ++key_value) {
-      this->insert_or_assign(key_value->first, *(key_value->second));
+    for (auto& [key, value] : other.values_) {
+      this->insert_or_assign(key, *(value));
     }
   }
 
   /* ************************************************************************* */
   void Values::erase(Key j) {
-    KeyValueMap::iterator item = values_.find(j);
-    if(item == values_.end())
+    KeyValueMap::iterator it = values_.find(j);
+    if(it == values_.end())
       throw ValuesKeyDoesNotExist("erase", j);
-    values_.erase(item);
+    values_.erase(it);
   }
 
   /* ************************************************************************* */
   KeyVector Values::keys() const {
     KeyVector result;
     result.reserve(size());
-    for(const auto& key_value: values_)
-      result.push_back(key_value.first);
+    for(const auto& [key,value]: values_)
+      result.push_back(key);
     return result;
   }
 
   /* ************************************************************************* */
   KeySet Values::keySet() const {
     KeySet result;
-    for(const auto& key_value: values_)
-      result.insert(key_value.first);
+    for(const auto& [key,value]: values_)
+      result.insert(key);
     return result;
   }
 
@@ -253,8 +242,8 @@ namespace gtsam {
   /* ************************************************************************* */
   size_t Values::dim() const {
     size_t result = 0;
-    for (const auto key_value : values_) {
-      result += key_value->second->dim();
+    for (const auto& [key,value] : values_) {
+      result += value->dim();
     }
     return result;
   }
@@ -262,8 +251,8 @@ namespace gtsam {
   /* ************************************************************************* */
   std::map<Key,size_t> Values::dims() const {
     std::map<Key,size_t> result;
-    for (const auto key_value : values_) {
-      result.emplace(key_value->first, key_value->second->dim());
+    for (const auto& [key,value] : values_) {
+      result.emplace(key, value->dim());
     }
     return result;
   }
@@ -271,8 +260,8 @@ namespace gtsam {
   /* ************************************************************************* */
   VectorValues Values::zeroVectors() const {
     VectorValues result;
-    for (const auto key_value : values_)
-      result.insert(key_value->first, Vector::Zero(key_value->second->dim()));
+    for (const auto& [key,value] : values_)
+      result.insert(key, Vector::Zero(value->dim()));
     return result;
   }
 

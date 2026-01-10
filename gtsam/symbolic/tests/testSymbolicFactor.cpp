@@ -21,8 +21,6 @@
 #include <gtsam/symbolic/SymbolicConditional.h>
 #include <gtsam/symbolic/SymbolicFactorGraph.h>
 
-#include <boost/make_shared.hpp>
-#include <boost/tuple/tuple.hpp>
 
 using namespace std;
 using namespace gtsam;
@@ -68,17 +66,15 @@ TEST(SymbolicFactor, Constructors)
 TEST(SymbolicFactor, EliminateSymbolic)
 {
   const SymbolicFactorGraph factors = {
-      boost::make_shared<SymbolicFactor>(2, 4, 6),
-      boost::make_shared<SymbolicFactor>(1, 2, 5),
-      boost::make_shared<SymbolicFactor>(0, 3)};
+      std::make_shared<SymbolicFactor>(2, 4, 6),
+      std::make_shared<SymbolicFactor>(1, 2, 5),
+      std::make_shared<SymbolicFactor>(0, 3)};
 
   const SymbolicFactor expectedFactor(4,5,6);
   const SymbolicConditional expectedConditional =
     SymbolicConditional::FromKeys(KeyVector{0,1,2,3,4,5,6}, 4);
 
-  SymbolicFactor::shared_ptr actualFactor;
-  SymbolicConditional::shared_ptr actualConditional;
-  boost::tie(actualConditional, actualFactor) =
+  const auto [actualConditional, actualFactor] =
       EliminateSymbolic(factors, Ordering{0, 1, 2, 3});
 
   CHECK(assert_equal(expectedConditional, *actualConditional));

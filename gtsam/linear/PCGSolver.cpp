@@ -22,8 +22,6 @@
 #include <gtsam/linear/Preconditioner.h>
 #include <gtsam/linear/VectorValues.h>
 
-#include <boost/algorithm/string.hpp>
-
 #include <algorithm>
 #include <iostream>
 #include <stdexcept>
@@ -36,21 +34,17 @@ namespace gtsam {
 void PCGSolverParameters::print(ostream &os) const {
   Base::print(os);
   os << "PCGSolverParameters:" << endl;
-  preconditioner_->print(os);
+  preconditioner->print(os);
 }
 
 /*****************************************************************************/
 PCGSolver::PCGSolver(const PCGSolverParameters &p) {
   parameters_ = p;
-  preconditioner_ = createPreconditioner(p.preconditioner_);
-}
-
-void PCGSolverParameters::setPreconditionerParams(const boost::shared_ptr<PreconditionerParameters> preconditioner) {
-  preconditioner_ = preconditioner;
+  preconditioner_ = createPreconditioner(p.preconditioner);
 }
 
 void PCGSolverParameters::print(const std::string &s) const {
-  std::cout << s << std::endl;;
+  std::cout << s << std::endl;
   std::ostringstream os;
   print(os);
   std::cout << os.str() << std::endl;

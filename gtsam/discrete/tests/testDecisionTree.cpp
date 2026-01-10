@@ -11,20 +11,23 @@
 
 /*
  * @file    testDecisionTree.cpp
- * @brief    Develop DecisionTree
+ * @brief   DecisionTree unit tests
  * @author  Frank Dellaert
  * @author  Can Erdogan
  * @date    Jan 30, 2012
  */
 
 // #define DT_DEBUG_MEMORY
-// #define GTSAM_DT_NO_PRUNING
 #define DISABLE_DOT
 #include <CppUnitLite/TestHarness.h>
 #include <gtsam/base/Testable.h>
 #include <gtsam/base/serializationTestHelpers.h>
 #include <gtsam/discrete/DecisionTree-inl.h>
+#include <gtsam/discrete/Ring.h>
 #include <gtsam/discrete/Signature.h>
+#include <gtsam/inference/Symbol.h>
+
+#include <iomanip>
 
 using std::vector;
 using std::string;
@@ -50,7 +53,9 @@ struct CrazyDecisionTree : public DecisionTree<string, Crazy> {
   void print(const std::string& s = "") const {
     auto keyFormatter = [](const std::string& s) { return s; };
     auto valueFormatter = [](const Crazy& v) {
-      return (boost::format("{%d,%4.2g}") % v.a % v.b).str();
+      std::stringstream ss;
+      ss << "{" << v.a << "," << std::setw(4) << std::setprecision(2) << v.b << "}";
+      return ss.str();
     };
     DecisionTree<string, Crazy>::print("", keyFormatter, valueFormatter);
   }
@@ -72,6 +77,19 @@ struct traits<CrazyDecisionTree> : public Testable<CrazyDecisionTree> {};
 GTSAM_CONCEPT_TESTABLE_INST(CrazyDecisionTree)
 
 /* ************************************************************************** */
+// Test char labels and int range
+/* ************************************************************************** */
+
+// Create a decision stump one one variable 'a' with values 10 and 20.
+TEST(DecisionTree, Constructor) {
+  DecisionTree<char, int> tree('a', 10, 20);
+
+  // Evaluate the tree on an assignment to the variable.
+  EXPECT_LONGS_EQUAL(10, tree({{'a', 0}}));
+  EXPECT_LONGS_EQUAL(20, tree({{'a', 1}}));
+}
+
+/* ************************************************************************** */
 // Test string labels and int range
 /* ************************************************************************** */
 
@@ -86,11 +104,12 @@ struct DT : public DecisionTree<string, int> {
   void print(const std::string& s = "") const {
     auto keyFormatter = [](const std::string& s) { return s; };
     auto valueFormatter = [](const int& v) {
-      return (boost::format("%d") % v).str();
+      return std::to_string(v);
     };
     std::cout << s;
     Base::print("", keyFormatter, valueFormatter);
   }
+
   /// Equality method customized to int node type
   bool equals(const Base& other, double tol = 1e-9) const {
     auto compare = [](const int& v, const int& w) { return v == w; };
@@ -106,26 +125,47 @@ struct traits<DT> : public Testable<DT> {};
 
 GTSAM_CONCEPT_TESTABLE_INST(DT)
 
-struct Ring {
-  static inline int zero() { return 0; }
-  static inline int one() { return 1; }
-  static inline int id(const int& a) { return a; }
-  static inline int add(const int& a, const int& b) { return a + b; }
-  static inline int mul(const int& a, const int& b) { return a * b; }
-};
+/* ************************************************************************** */
+// Check that creating decision trees respects key order.
+TEST(DecisionTree, ConstructorOrder) {
+  // Create labels
+  string A("A"), B("B");
+
+  const std::vector<int> ys1 = {1, 2, 3, 4};
+  DT tree1({{B, 2}, {A, 2}}, ys1); // faster version, as B is "higher" than A!
+
+  const std::vector<int> ys2 = {1, 3, 2, 4};
+  DT tree2({{A, 2}, {B, 2}}, ys2); // slower version !
+
+  // Both trees will be the same, tree is order from high to low labels.
+  // Choice(B)
+  //  0 Choice(A)
+  //  0 0 Leaf 1
+  //  0 1 Leaf 2
+  //  1 Choice(A)
+  //  1 0 Leaf 3
+  //  1 1 Leaf 4
+
+  EXPECT(tree2.equals(tree1));
+
+  // Check the values are as expected by calling the () operator:
+  EXPECT_LONGS_EQUAL(1, tree1({{A, 0}, {B, 0}}));
+  EXPECT_LONGS_EQUAL(3, tree1({{A, 0}, {B, 1}}));
+  EXPECT_LONGS_EQUAL(2, tree1({{A, 1}, {B, 0}}));
+  EXPECT_LONGS_EQUAL(4, tree1({{A, 1}, {B, 1}}));
+}
 
 /* ************************************************************************** */
 // test DT
-TEST(DecisionTree, example) {
+TEST(DecisionTree, Example) {
   // Create labels
   string A("A"), B("B"), C("C");
 
-  // create a value
-  Assignment<string> x00, x01, x10, x11;
-  x00[A] = 0, x00[B] = 0;
-  x01[A] = 0, x01[B] = 1;
-  x10[A] = 1, x10[B] = 0;
-  x11[A] = 1, x11[B] = 1;
+  // Create assignments using brace initialization:
+  Assignment<string> x00{{A, 0}, {B, 0}};
+  Assignment<string> x01{{A, 0}, {B, 1}};
+  Assignment<string> x10{{A, 1}, {B, 0}};
+  Assignment<string> x11{{A, 1}, {B, 1}};
 
   // empty
   DT empty;
@@ -187,7 +227,11 @@ TEST(DecisionTree, example) {
 
   // Test choose 0
   DT actual0 = notba.choose(A, 0);
-  EXPECT(assert_equal(DT(0.0), actual0));
+#ifdef GTSAM_DT_MERGING
+  EXPECT(assert_equal(DT(0), actual0));
+#else
+  EXPECT(assert_equal(DT(B, 0, 0), actual0));
+#endif
   DOT(actual0);
 
   // Test choose 1
@@ -222,6 +266,58 @@ TEST(DecisionTree, example) {
 }
 
 /* ************************************************************************** */
+// Test that we can create two trees out of one, using a function that returns a pair.
+TEST(DecisionTree, Split) {
+  // Create labels
+  string A("A"), B("B");
+
+  // Create a decision tree
+  DT original(A, DT(B, 1, 2), DT(B, 3, 4));
+
+  // Define a function that returns an int/bool pair
+  auto split_function = [](const int& value) -> std::pair<int, bool> {
+    return {value*3, value*3 % 2 == 0};
+  };
+
+  // Split the original tree into two new trees
+  auto [la,lb] = original.split<int,bool>(split_function);
+
+  // Check the first resulting tree
+  EXPECT_LONGS_EQUAL(3, la(Assignment<string>{{A, 0}, {B, 0}}));
+  EXPECT_LONGS_EQUAL(6, la(Assignment<string>{{A, 0}, {B, 1}}));
+  EXPECT_LONGS_EQUAL(9, la(Assignment<string>{{A, 1}, {B, 0}}));
+  EXPECT_LONGS_EQUAL(12, la(Assignment<string>{{A, 1}, {B, 1}}));
+
+  // Check the second resulting tree
+  EXPECT(!lb(Assignment<string>{{A, 0}, {B, 0}}));
+  EXPECT(lb(Assignment<string>{{A, 0}, {B, 1}}));
+  EXPECT(!lb(Assignment<string>{{A, 1}, {B, 0}}));
+  EXPECT(lb(Assignment<string>{{A, 1}, {B, 1}}));
+}
+
+
+/* ************************************************************************** */
+// Test that we can create a tree by modifying an rvalue.
+TEST(DecisionTree, Consume) {
+  // Create labels
+  string A("A"), B("B");
+
+  // Create a decision tree
+  DT original(A, DT(B, 1, 2), DT(B, 3, 4));
+
+  DT modified([](int i){return i*2;}, std::move(original));
+
+  // Check the first resulting tree
+  EXPECT_LONGS_EQUAL(2, modified(Assignment<string>{{A, 0}, {B, 0}}));
+  EXPECT_LONGS_EQUAL(4, modified(Assignment<string>{{A, 0}, {B, 1}}));
+  EXPECT_LONGS_EQUAL(6, modified(Assignment<string>{{A, 1}, {B, 0}}));
+  EXPECT_LONGS_EQUAL(8, modified(Assignment<string>{{A, 1}, {B, 1}}));
+
+  // Check original was moved
+  EXPECT(original.root_ == nullptr);
+}
+
+/* ************************************************************************** */
 // test Conversion of values
 bool bool_of_int(const int& y) { return y != 0; };
 typedef DecisionTree<string, bool> StringBoolTree;
@@ -237,8 +333,7 @@ TEST(DecisionTree, ConvertValuesOnly) {
   StringBoolTree f2(f1, bool_of_int);
 
   // Check a value
-  Assignment<string> x00;
-  x00["A"] = 0, x00["B"] = 0;
+  Assignment<string> x00 {{A, 0}, {B, 0}};
   EXPECT(!f2(x00));
 }
 
@@ -262,10 +357,11 @@ TEST(DecisionTree, ConvertBoth) {
 
   // Check some values
   Assignment<Label> x00, x01, x10, x11;
-  x00[X] = 0, x00[Y] = 0;
-  x01[X] = 0, x01[Y] = 1;
-  x10[X] = 1, x10[Y] = 0;
-  x11[X] = 1, x11[Y] = 1;
+  x00 = {{X, 0}, {Y, 0}};
+  x01 = {{X, 0}, {Y, 1}};
+  x10 = {{X, 1}, {Y, 0}};
+  x11 = {{X, 1}, {Y, 1}};
+
   EXPECT(!f2(x00));
   EXPECT(!f2(x01));
   EXPECT(f2(x10));
@@ -321,49 +417,6 @@ TEST(DecisionTree, Containers) {
 }
 
 /* ************************************************************************** */
-// Test nrAssignments.
-TEST(DecisionTree, NrAssignments) {
-  const std::pair<string, size_t> A("A", 2), B("B", 2), C("C", 2);
-  DT tree({A, B, C}, "1 1 1 1 1 1 1 1");
-  EXPECT(tree.root_->isLeaf());
-  auto leaf = boost::dynamic_pointer_cast<const DT::Leaf>(tree.root_);
-  EXPECT_LONGS_EQUAL(8, leaf->nrAssignments());
-
-  DT tree2({C, B, A}, "1 1 1 2 3 4 5 5");
-  /* The tree is
-    Choice(C) 
-    0 Choice(B) 
-    0 0 Leaf 1
-    0 1 Choice(A) 
-    0 1 0 Leaf 1
-    0 1 1 Leaf 2
-    1 Choice(B) 
-    1 0 Choice(A) 
-    1 0 0 Leaf 3
-    1 0 1 Leaf 4
-    1 1 Leaf 5
-  */
-
-  auto root = boost::dynamic_pointer_cast<const DT::Choice>(tree2.root_);
-  CHECK(root);
-  auto choice0 = boost::dynamic_pointer_cast<const DT::Choice>(root->branches()[0]);
-  CHECK(choice0);
-  EXPECT(choice0->branches()[0]->isLeaf());
-  auto choice00 = boost::dynamic_pointer_cast<const DT::Leaf>(choice0->branches()[0]);
-  CHECK(choice00);
-  EXPECT_LONGS_EQUAL(2, choice00->nrAssignments());
-
-  auto choice1 = boost::dynamic_pointer_cast<const DT::Choice>(root->branches()[1]);
-  CHECK(choice1);
-  auto choice10 = boost::dynamic_pointer_cast<const DT::Choice>(choice1->branches()[0]);
-  CHECK(choice10);
-  auto choice11 = boost::dynamic_pointer_cast<const DT::Leaf>(choice1->branches()[1]);
-  CHECK(choice11);
-  EXPECT(choice11->isLeaf());
-  EXPECT_LONGS_EQUAL(2, choice11->nrAssignments());
-}
-
-/* ************************************************************************** */
 // Test visit.
 TEST(DecisionTree, visit) {
   // Create small two-level tree
@@ -402,10 +455,15 @@ TEST(DecisionTree, VisitWithPruned) {
   };
   tree.visitWith(func);
 
+#ifdef GTSAM_DT_MERGING
   EXPECT_LONGS_EQUAL(6, choices.size());
+#else
+  EXPECT_LONGS_EQUAL(8, choices.size());
+#endif
 
   Assignment<string> expectedAssignment;
 
+#ifdef GTSAM_DT_MERGING
   expectedAssignment = {{"B", 0}, {"C", 0}};
   EXPECT(expectedAssignment == choices.at(0));
 
@@ -423,6 +481,25 @@ TEST(DecisionTree, VisitWithPruned) {
 
   expectedAssignment = {{"A", 1}, {"B", 1}, {"C", 1}};
   EXPECT(expectedAssignment == choices.at(5));
+#else
+  expectedAssignment = {{"A", 0}, {"B", 0}, {"C", 0}};
+  EXPECT(expectedAssignment == choices.at(0));
+
+  expectedAssignment = {{"A", 1}, {"B", 0}, {"C", 0}};
+  EXPECT(expectedAssignment == choices.at(1));
+
+  expectedAssignment = {{"A", 0}, {"B", 1}, {"C", 0}};
+  EXPECT(expectedAssignment == choices.at(2));
+
+  expectedAssignment = {{"A", 1}, {"B", 1}, {"C", 0}};
+  EXPECT(expectedAssignment == choices.at(3));
+
+  expectedAssignment = {{"A", 0}, {"B", 0}, {"C", 1}};
+  EXPECT(expectedAssignment == choices.at(4));
+
+  expectedAssignment = {{"A", 1}, {"B", 0}, {"C", 1}};
+  EXPECT(expectedAssignment == choices.at(5));
+#endif
 }
 
 /* ************************************************************************** */
@@ -433,7 +510,11 @@ TEST(DecisionTree, fold) {
   DT tree(B, DT(A, 1, 1), DT(A, 2, 3));
   auto add = [](const int& y, double x) { return y + x; };
   double sum = tree.fold(add, 0.0);
-  EXPECT_DOUBLES_EQUAL(6.0, sum, 1e-9);  // Note, not 7, due to pruning!
+#ifdef GTSAM_DT_MERGING
+  EXPECT_DOUBLES_EQUAL(6.0, sum, 1e-9);  // Note, not 7, due to merging!
+#else
+  EXPECT_DOUBLES_EQUAL(7.0, sum, 1e-9);
+#endif
 }
 
 /* ************************************************************************** */
@@ -458,9 +539,7 @@ TEST(DecisionTree, unzip) {
   DTP tree(B, DTP(A, {0, "zero"}, {1, "one"}),
            DTP(A, {2, "two"}, {1337, "l33t"}));
 
-  DT1 dt1;
-  DT2 dt2;
-  std::tie(dt1, dt2) = unzip(tree);
+  const auto [dt1, dt2] = unzip(tree);
 
   DT1 tree1(B, DT1(A, 0, 1), DT1(A, 2, 1337));
   DT2 tree2(B, DT2(A, "zero", "one"), DT2(A, "two", "l33t"));
@@ -487,9 +566,14 @@ TEST(DecisionTree, threshold) {
   auto threshold = [](int value) { return value < 5 ? 0 : value; };
   DT thresholded(tree, threshold);
 
+#ifdef GTSAM_DT_MERGING
   // Check number of leaves equal to zero now = 2
   // Note: it is 2, because the pruned branches are counted as 1!
   EXPECT_LONGS_EQUAL(2, thresholded.fold(count, 0));
+#else
+  // if GTSAM_DT_MERGING is disabled, the count will be larger
+  EXPECT_LONGS_EQUAL(5, thresholded.fold(count, 0));
+#endif
 }
 
 /* ************************************************************************** */
@@ -525,8 +609,28 @@ TEST(DecisionTree, ApplyWithAssignment) {
   };
   DT prunedTree2 = prunedTree.apply(counter);
 
+#ifdef GTSAM_DT_MERGING
   // Check if apply doesn't enumerate all leaves.
   EXPECT_LONGS_EQUAL(5, count);
+#else
+  // if GTSAM_DT_MERGING is disabled, the count will be full
+  EXPECT_LONGS_EQUAL(8, count);
+#endif
+}
+
+/* ************************************************************************** */
+// Test apply with assignment.
+TEST(DecisionTree, Restrict) {
+  // Create three level tree
+  const vector<DT::LabelC> keys{DT::LabelC("C", 2), DT::LabelC("B", 2),
+                                DT::LabelC("A", 2)};
+  DT tree(keys, "1 2 3 4 5 6 7 8");
+
+  DT restrictedTree = tree.restrict({{"A", 0}, {"B", 1}});
+  EXPECT(assert_equal(DT({DT::LabelC("C", 2)}, "3 7"), restrictedTree));
+
+  DT restrictMore = tree.restrict({{"A", 1}, {"B", 1}, {"C", 1}});
+  EXPECT(assert_equal(DT(8), restrictMore));
 }
 
 /* ************************************************************************* */

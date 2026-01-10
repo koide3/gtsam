@@ -18,12 +18,12 @@
 
 #pragma once
 
-#include <gtsam/inference/Conditional-inst.h>
 #include <gtsam/discrete/DecisionTreeFactor.h>
 #include <gtsam/discrete/Signature.h>
+#include <gtsam/inference/Conditional-inst.h>
 
-#include <boost/make_shared.hpp>
-#include <boost/shared_ptr.hpp>
+#include <memory>
+#include <random>  // for std::mt19937_64
 #include <string>
 #include <vector>
 
@@ -40,8 +40,8 @@ class GTSAM_EXPORT DiscreteConditional
       public Conditional<DecisionTreeFactor, DiscreteConditional> {
  public:
   // typedefs needed to play nice with gtsam
-  typedef DiscreteConditional This;            ///< Typedef to this class
-  typedef boost::shared_ptr<This> shared_ptr;  ///< shared_ptr to this class
+  typedef DiscreteConditional This;          ///< Typedef to this class
+  typedef std::shared_ptr<This> shared_ptr;  ///< shared_ptr to this class
   typedef DecisionTreeFactor BaseFactor;  ///< Typedef to our factor base class
   typedef Conditional<BaseFactor, This>
       BaseConditional;  ///< Typedef to our conditional base class
@@ -55,7 +55,7 @@ class GTSAM_EXPORT DiscreteConditional
   DiscreteConditional() {}
 
   /// Construct from factor, taking the first `nFrontals` keys as frontals.
-  DiscreteConditional(size_t nFrontals, const DecisionTreeFactor& f);
+  DiscreteConditional(size_t nFrontals, const DiscreteFactor& f);
 
   /**
    * Construct from DiscreteKeys and AlgebraicDecisionTree, taking the first
@@ -77,6 +77,18 @@ class GTSAM_EXPORT DiscreteConditional
   DiscreteConditional(const DiscreteKey& key, const DiscreteKeys& parents,
                       const Signature::Table& table)
       : DiscreteConditional(Signature(key, parents, table)) {}
+
+  /**
+   * Construct from key, parents, and a vector<double> specifying the
+   * conditional probability table (CPT) in 00 01 10 11 order. For
+   * three-valued, it would be 00 01 02 10 11 12 20 21 22, etc....
+   *
+   * Example: DiscreteConditional P(D, {B,E}, table);
+   */
+  DiscreteConditional(const DiscreteKey& key, const DiscreteKeys& parents,
+                      const std::vector<double>& table)
+      : DiscreteConditional(1, DiscreteKeys{key} & parents,
+                            ADT(DiscreteKeys{key} & parents, table)) {}
 
   /**
    * Construct from key, parents, and a string specifying the conditional
@@ -148,9 +160,7 @@ class GTSAM_EXPORT DiscreteConditional
   /// @{
 
   /// Log-probability is just -error(x).
-  double logProbability(const DiscreteValues& x) const  {
-    return -error(x);
-  }
+  double logProbability(const DiscreteValues& x) const { return -error(x); }
 
   /// print index signature only
   void printSignature(
@@ -159,13 +169,9 @@ class GTSAM_EXPORT DiscreteConditional
     static_cast<const BaseConditional*>(this)->print(s, formatter);
   }
 
-  /// Evaluate, just look up in AlgebraicDecisonTree
-  double evaluate(const DiscreteValues& values) const {
-    return ADT::operator()(values);
-  }
-
-  using DecisionTreeFactor::error;       ///< DiscreteValues version
-  using DecisionTreeFactor::operator();  ///< DiscreteValues version
+  using BaseFactor::error;       ///< DiscreteValues version
+  using BaseFactor::evaluate;    ///< DiscreteValues version
+  using BaseFactor::operator();  ///< DiscreteValues version
 
   /**
    * @brief restrict to given *parent* values.
@@ -190,30 +196,53 @@ class GTSAM_EXPORT DiscreteConditional
   DecisionTreeFactor::shared_ptr likelihood(size_t frontal) const;
 
   /**
-   * sample
+   * Sample from conditional, given missing variables
+   * Example:
+   *   std::mt19937_64 rng(42);
+   *   DiscreteValues given = ...;
+   *   size_t sample = dc.sample(given, &rng);
+   *
    * @param parentsValues Known values of the parents
+   * @param rng Pseudo-Random Number Generator.
    * @return sample from conditional
    */
-  size_t sample(const DiscreteValues& parentsValues) const;
+  virtual size_t sample(const DiscreteValues& parentsValues,
+                        std::mt19937_64* rng = nullptr) const;
 
   /// Single parent version.
-  size_t sample(size_t parent_value) const;
-
-  /// Zero parent version.
-  size_t sample() const;
+  size_t sample(size_t parent_value, std::mt19937_64* rng = nullptr) const;
 
   /**
-   * @brief Return assignment that maximizes distribution.
-   * @return Optimal assignment (1 frontal variable).
+   * Sample from conditional, zero parent version
+   * Example:
+   *   std::mt19937_64 rng(42);
+   *   auto sample = dc.sample(&rng);
    */
-  size_t argmax() const;
+  size_t sample(std::mt19937_64* rng = nullptr) const;
+
+  /**
+   * @brief Return assignment for single frontal variable that maximizes value.
+   * @param parentsValues Known assignments for the parents.
+   * @return maximizing assignment for the frontal variable.
+   */
+  size_t argmax(const DiscreteValues& parentsValues = DiscreteValues()) const;
+
+  /**
+   * @brief Create new factor by maximizing over all
+   * values with the same separator.
+   *
+   * @param keys The keys to sum over.
+   * @return DiscreteFactor::shared_ptr
+   */
+  virtual DiscreteFactor::shared_ptr max(const Ordering& keys) const override;
 
   /// @}
   /// @name Advanced Interface
   /// @{
 
-  /// sample in place, stores result in partial solution
-  void sampleInPlace(DiscreteValues* parentsValues) const;
+  /// Sample in place with optional PRNG, stores result in partial solution
+  void sampleInPlace(DiscreteValues* parentsValues,
+                     std::mt19937_64* rng = nullptr) const;
 
   /// Return all assignments for frontal variables.
   std::vector<DiscreteValues> frontalAssignments() const;
@@ -232,7 +261,6 @@ class GTSAM_EXPORT DiscreteConditional
   /// Render as html table.
   std::string html(const KeyFormatter& keyFormatter = DefaultKeyFormatter,
                    const Names& names = {}) const override;
-
 
   /// @}
   /// @name HybridValues methods.
@@ -255,21 +283,27 @@ class GTSAM_EXPORT DiscreteConditional
   }
 
   /**
-   * logNormalizationConstant K is just zero, such that
-   * logProbability(x) = log(evaluate(x)) = - error(x)
-   * and hence error(x) = - log(evaluate(x)) > 0 for all x.
+   * negLogConstant is just zero, such that
+   * -logProbability(x) = -log(evaluate(x)) = error(x)
+   * and hence error(x) > 0 for all x.
+   * Thus -log(K) for the normalization constant k is 0.
    */
-  double logNormalizationConstant() const override { return 0.0; }
+  double negLogConstant() const override;
+
+  /// Prune the conditional
+  virtual void prune(size_t maxNrAssignments);
+
+  /**
+   * @brief Remove the discrete modes whose assignments are given to us.
+   * Only applies to discrete conditionals.
+   *
+   * Imperative method so we can update nodes in the Bayes net or Bayes tree.
+   *
+   * @param given The discrete modes whose assignments we know.
+   */
+  void removeDiscreteModes(const DiscreteValues& given);
 
   /// @}
-
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-  /// @name Deprecated functionality
-  /// @{
-  size_t GTSAM_DEPRECATED solve(const DiscreteValues& parentsValues) const;
-  void GTSAM_DEPRECATED solveInPlace(DiscreteValues* parentsValues) const;
-  /// @}
-#endif
 
  protected:
   /// Internal version of choose
@@ -277,6 +311,7 @@ class GTSAM_EXPORT DiscreteConditional
                                   bool forceComplete) const;
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template <class Archive>
@@ -284,6 +319,7 @@ class GTSAM_EXPORT DiscreteConditional
     ar& BOOST_SERIALIZATION_BASE_OBJECT_NVP(BaseFactor);
     ar& BOOST_SERIALIZATION_BASE_OBJECT_NVP(BaseConditional);
   }
+#endif
 };
 // DiscreteConditional
 

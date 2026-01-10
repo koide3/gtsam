@@ -22,10 +22,7 @@
 #include <gtsam/base/Matrix.h>
 #include <gtsam/base/Testable.h>
 #include <gtsam/base/OptionalJacobian.h>
-
-#include <boost/concept_check.hpp>
-#include <boost/concept/requires.hpp>
-#include <boost/type_traits/is_base_of.hpp>
+#include <gtsam/base/concepts.h>
 
 namespace gtsam {
 
@@ -58,13 +55,13 @@ namespace internal {
 template<class Class>
 struct HasManifoldPrereqs {
 
-  enum { dim = Class::dimension };
+  inline constexpr static auto dim = Class::dimension;
 
   Class p, q;
   Eigen::Matrix<double, dim, 1> v;
   OptionalJacobian<dim, dim> Hp, Hq, Hv;
 
-  BOOST_CONCEPT_USAGE(HasManifoldPrereqs) {
+  GTSAM_CONCEPT_USAGE(HasManifoldPrereqs) {
     v = p.localCoordinates(q);
     q = p.retract(v);
   }
@@ -95,10 +92,10 @@ template<class Class>
 struct ManifoldTraits: GetDimensionImpl<Class, Class::dimension> {
 
   // Check that Class has the necessary machinery
-  BOOST_CONCEPT_ASSERT((HasManifoldPrereqs<Class>));
+  GTSAM_CONCEPT_ASSERT(HasManifoldPrereqs<Class>);
 
   // Dimension of the manifold
-  enum { dimension = Class::dimension };
+  inline constexpr static auto dimension = Class::dimension;
 
   // Typedefs required by all manifold types.
   typedef Class ManifoldType;
@@ -123,7 +120,7 @@ template<class Class> struct Manifold: ManifoldTraits<Class>, Testable<Class> {}
 
 /// Check invariants for Manifold type
 template<typename T>
-BOOST_CONCEPT_REQUIRES(((IsTestable<T>)),(bool)) //
+GTSAM_CONCEPT_REQUIRES(IsTestable<T>, bool) //
 check_manifold_invariants(const T& a, const T& b, double tol=1e-9) {
   typename traits<T>::TangentVector v0 = traits<T>::Local(a,a);
   typename traits<T>::TangentVector v = traits<T>::Local(a,b);
@@ -141,12 +138,15 @@ public:
   static const int dim = traits<T>::dimension;
   typedef typename traits<T>::ManifoldType ManifoldType;
   typedef typename traits<T>::TangentVector TangentVector;
+  // Concept marker: allows checking IsManifold<T>::value in templates
+  static constexpr bool value =
+    std::is_base_of<manifold_tag, structure_category_tag>::value;
 
-  BOOST_CONCEPT_USAGE(IsManifold) {
-    BOOST_STATIC_ASSERT_MSG(
-        (boost::is_base_of<manifold_tag, structure_category_tag>::value),
+  GTSAM_CONCEPT_USAGE(IsManifold) {
+    static_assert(
+        value,
         "This type's structure_category trait does not assert it as a manifold (or derived)");
-    BOOST_STATIC_ASSERT(TangentVector::SizeAtCompileTime == dim);
+    static_assert(TangentVector::SizeAtCompileTime == dim);
 
     // make sure Chart methods are defined
     v = traits<T>::Local(p, q);
@@ -164,8 +164,8 @@ template<typename T>
 struct FixedDimension {
   typedef const int value_type;
   static const int value = traits<T>::dimension;
-  BOOST_STATIC_ASSERT_MSG(value != Eigen::Dynamic,
-      "FixedDimension instantiated for dymanically-sized type.");
+  static_assert(value != Eigen::Dynamic,
+      "FixedDimension instantiated for dynamically-sized type.");
 };
 } // \ namespace gtsam
 

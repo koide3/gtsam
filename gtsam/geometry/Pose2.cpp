@@ -20,6 +20,7 @@
 #include <gtsam/base/concepts.h>
 
 #include <cmath>
+#include <cassert>
 #include <iostream>
 #include <iomanip>
 
@@ -97,7 +98,7 @@ Vector3 Pose2::Logmap(const Pose2& p, OptionalJacobian<3, 3> H) {
 
 /* ************************************************************************* */
 Pose2 Pose2::ChartAtOrigin::Retract(const Vector3& v, ChartJacobian H) {
-#ifdef SLOW_BUT_CORRECT_EXPMAP
+#ifdef GTSAM_SLOW_BUT_CORRECT_EXPMAP
   return Expmap(v, H);
 #else
   if (H) {
@@ -109,7 +110,7 @@ Pose2 Pose2::ChartAtOrigin::Retract(const Vector3& v, ChartJacobian H) {
 }
 /* ************************************************************************* */
 Vector3 Pose2::ChartAtOrigin::Local(const Pose2& r, ChartJacobian H) {
-#ifdef SLOW_BUT_CORRECT_EXPMAP
+#ifdef GTSAM_SLOW_BUT_CORRECT_EXPMAP
   return Logmap(r, H);
 #else
   if (H) {
@@ -200,6 +201,20 @@ Matrix3 Pose2::LogmapDerivative(const Pose2& p) {
 /* ************************************************************************* */
 Pose2 Pose2::inverse() const {
   return Pose2(r_.inverse(), r_.unrotate(Point2(-t_.x(), -t_.y())));
+}
+
+/* ************************************************************************* */
+Matrix3 Pose2::Hat(const Pose2::TangentVector& xi) {
+  Matrix3 X;
+  X << 0., -xi.z(), xi.x(),
+    xi.z(), 0., xi.y(),
+    0., 0., 0.;
+  return X;
+}
+
+/* ************************************************************************* */
+Pose2::TangentVector Pose2::Vee(const Matrix3& X) {
+  return TangentVector(X(0, 2), X(1, 2), X(1,0));
 }
 
 /* ************************************************************************* */
@@ -308,6 +323,32 @@ double Pose2::range(const Pose2& pose,
   return r;
 }
 
+/* ************************************************************************* */
+// Compute vectorized Lie algebra generators for SE(2)
+static Matrix93 VectorizedGenerators() {
+  Matrix93 G;
+  for (size_t j = 0; j < 3; j++) {
+    const Matrix3 X = Pose2::Hat(Vector::Unit(3, j));
+    G.col(j) = Eigen::Map<const Vector9>(X.data());
+  }
+  return G;
+}
+
+Vector9 Pose2::vec(OptionalJacobian<9, 3> H) const {
+  // Vectorize
+  const Matrix3 M = matrix();
+  const Vector9 X = Eigen::Map<const Vector9>(M.data());
+
+  // If requested, calculate H as (I_3 \oplus M) * G.
+  if (H) {
+    static const Matrix93 G = VectorizedGenerators(); // static to compute only once
+    for (size_t i = 0; i < 3; i++)
+      H->block(i * 3, 0, 3, dimension) = M * G.block(i * 3, 0, 3, dimension);
+  }
+
+  return X;
+}
+
 /* *************************************************************************
  * Align finds the angle using a linear method:
  * a = Pose2::transformFrom(b) = t + R*b
@@ -327,10 +368,10 @@ double Pose2::range(const Pose2& pose,
  * as they also satisfy ca = t + R*cb, hence t = ca - R*cb
  */
 
-boost::optional<Pose2> Pose2::Align(const Point2Pairs &ab_pairs) {
+std::optional<Pose2> Pose2::Align(const Point2Pairs &ab_pairs) {
   const size_t n = ab_pairs.size();
   if (n < 2) {
-    return boost::none;  // we need at least 2 pairs
+    return {};  // we need at least 2 pairs
   }
 
   // calculate centroids
@@ -359,7 +400,7 @@ boost::optional<Pose2> Pose2::Align(const Point2Pairs &ab_pairs) {
   return Pose2(R, t);
 }
 
-boost::optional<Pose2> Pose2::Align(const Matrix& a, const Matrix& b) {
+std::optional<Pose2> Pose2::Align(const Matrix& a, const Matrix& b) {
   if (a.rows() != 2 || b.rows() != 2 || a.cols() != b.cols()) {
     throw std::invalid_argument(
       "Pose2:Align expects 2*N matrices of equal shape.");
@@ -370,16 +411,6 @@ boost::optional<Pose2> Pose2::Align(const Matrix& a, const Matrix& b) {
   }
   return Pose2::Align(ab_pairs);
 }
-
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-boost::optional<Pose2> align(const Point2Pairs& ba_pairs) {
-  Point2Pairs ab_pairs;
-  for (const Point2Pair &baPair : ba_pairs) {
-    ab_pairs.emplace_back(baPair.second, baPair.first);
-  }
-  return Pose2::Align(ab_pairs);
-}
-#endif
 
 /* ************************************************************************* */
 } // namespace gtsam

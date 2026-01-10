@@ -41,7 +41,7 @@ using namespace example;
 using symbol_shorthand::X;
 using symbol_shorthand::L;
 
-typedef boost::shared_ptr<NonlinearFactor > shared_nlf;
+typedef std::shared_ptr<NonlinearFactor > shared_nlf;
 
 /* ************************************************************************* */
 TEST( NonlinearFactor, equals )
@@ -90,7 +90,7 @@ TEST( NonlinearFactor, NonlinearFactor )
 
   // calculate the error_vector from the factor "f1"
   // error_vector = [0.1 0.1]
-  Vector actual_e = boost::dynamic_pointer_cast<NoiseModelFactor>(factor)->unwhitenedError(cfg);
+  Vector actual_e = std::dynamic_pointer_cast<NoiseModelFactor>(factor)->unwhitenedError(cfg);
   CHECK(assert_equal(0.1*Vector::Ones(2),actual_e));
 
   // error = 0.5 * [1 1] * [1;1] = 1
@@ -323,7 +323,7 @@ TEST( NonlinearFactor, cloneWithNewNoiseModel )
   // create actual
   NonlinearFactorGraph actual;
   SharedNoiseModel noise2 = noiseModel::Isotropic::Sigma(2,sigma2);
-  actual.push_back( boost::dynamic_pointer_cast<NoiseModelFactor>(nfg[0])->cloneWithNewNoiseModel(noise2) );
+  actual.push_back(nfg.at<NoiseModelFactor>(0)->cloneWithNewNoiseModel(noise2));
 
   // check it's all good
   CHECK(assert_equal(expected, actual));
@@ -337,17 +337,22 @@ class TestFactor1 : public NoiseModelFactor1<double> {
 
  public:
   typedef NoiseModelFactor1<double> Base;
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   TestFactor1() : Base(noiseModel::Diagonal::Sigmas(Vector1(2.0)), L(1)) {}
+
+  // Provide access to the Matrix& version of evaluateError:
   using Base::NoiseModelFactor1;  // inherit constructors
 
-  Vector evaluateError(const double& x1, boost::optional<Matrix&> H1 =
-                                             boost::none) const override {
+  Vector evaluateError(const double& x1, OptionalMatrixType H1) const override {
     if (H1) *H1 = (Matrix(1, 1) << 1.0).finished();
     return (Vector(1) << x1).finished();
   }
 
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new TestFactor1(*this)));
   }
 };
@@ -360,7 +365,7 @@ TEST(NonlinearFactor, NoiseModelFactor1) {
   EXPECT(assert_equal((Vector(1) << 1.0).finished(), tf.unwhitenedError(tv)));
   DOUBLES_EQUAL(0.25 / 2.0, tf.error(tv), 1e-9);
   JacobianFactor jf(
-      *boost::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
+      *std::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
   LONGS_EQUAL((long)L(1), (long)jf.keys()[0]);
   EXPECT(assert_equal((Matrix)(Matrix(1, 1) << 0.5).finished(),
                       jf.getA(jf.begin())));
@@ -389,15 +394,19 @@ class TestFactor4 : public NoiseModelFactor4<double, double, double, double> {
 
  public:
   typedef NoiseModelFactor4<double, double, double, double> Base;
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   TestFactor4() : Base(noiseModel::Diagonal::Sigmas((Vector(1) << 2.0).finished()), X(1), X(2), X(3), X(4)) {}
+
+  // Provide access to the Matrix& version of evaluateError:
   using Base::NoiseModelFactor4;  // inherit constructors
 
   Vector
     evaluateError(const double& x1, const double& x2, const double& x3, const double& x4,
-        boost::optional<Matrix&> H1 = boost::none,
-        boost::optional<Matrix&> H2 = boost::none,
-        boost::optional<Matrix&> H3 = boost::none,
-        boost::optional<Matrix&> H4 = boost::none) const override {
+        OptionalMatrixType H1, OptionalMatrixType H2,
+        OptionalMatrixType H3, OptionalMatrixType H4) const override {
     if(H1) {
       *H1 = (Matrix(1, 1) << 1.0).finished();
       *H2 = (Matrix(1, 1) << 2.0).finished();
@@ -408,7 +417,7 @@ class TestFactor4 : public NoiseModelFactor4<double, double, double, double> {
   }
 
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new TestFactor4(*this))); }
 };
 
@@ -422,7 +431,7 @@ TEST(NonlinearFactor, NoiseModelFactor4) {
   tv.insert(X(4), double((4.0)));
   EXPECT(assert_equal((Vector(1) << 30.0).finished(), tf.unwhitenedError(tv)));
   DOUBLES_EQUAL(0.5 * 30.0 * 30.0 / 4.0, tf.error(tv), 1e-9);
-  JacobianFactor jf(*boost::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
+  JacobianFactor jf(*std::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
   LONGS_EQUAL((long)X(1), (long)jf.keys()[0]);
   LONGS_EQUAL((long)X(2), (long)jf.keys()[1]);
   LONGS_EQUAL((long)X(3), (long)jf.keys()[2]);
@@ -480,15 +489,16 @@ TEST(NonlinearFactor, NoiseModelFactor4) {
 class TestFactor5 : public NoiseModelFactor5<double, double, double, double, double> {
 public:
   typedef NoiseModelFactor5<double, double, double, double, double> Base;
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   TestFactor5() : Base(noiseModel::Diagonal::Sigmas((Vector(1) << 2.0).finished()), X(1), X(2), X(3), X(4), X(5)) {}
 
   Vector
     evaluateError(const X1& x1, const X2& x2, const X3& x3, const X4& x4, const X5& x5,
-        boost::optional<Matrix&> H1 = boost::none,
-        boost::optional<Matrix&> H2 = boost::none,
-        boost::optional<Matrix&> H3 = boost::none,
-        boost::optional<Matrix&> H4 = boost::none,
-        boost::optional<Matrix&> H5 = boost::none) const override {
+        OptionalMatrixType H1, OptionalMatrixType H2, OptionalMatrixType H3, 
+		OptionalMatrixType H4, OptionalMatrixType H5) const override {
     if(H1) {
       *H1 = (Matrix(1, 1) << 1.0).finished();
       *H2 = (Matrix(1, 1) << 2.0).finished();
@@ -512,7 +522,7 @@ TEST(NonlinearFactor, NoiseModelFactor5) {
   tv.insert(X(5), double((5.0)));
   EXPECT(assert_equal((Vector(1) << 55.0).finished(), tf.unwhitenedError(tv)));
   DOUBLES_EQUAL(0.5 * 55.0 * 55.0 / 4.0, tf.error(tv), 1e-9);
-  JacobianFactor jf(*boost::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
+  JacobianFactor jf(*std::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
   LONGS_EQUAL((long)X(1), (long)jf.keys()[0]);
   LONGS_EQUAL((long)X(2), (long)jf.keys()[1]);
   LONGS_EQUAL((long)X(3), (long)jf.keys()[2]);
@@ -530,16 +540,16 @@ TEST(NonlinearFactor, NoiseModelFactor5) {
 class TestFactor6 : public NoiseModelFactor6<double, double, double, double, double, double> {
 public:
   typedef NoiseModelFactor6<double, double, double, double, double, double> Base;
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   TestFactor6() : Base(noiseModel::Diagonal::Sigmas((Vector(1) << 2.0).finished()), X(1), X(2), X(3), X(4), X(5), X(6)) {}
 
   Vector
     evaluateError(const X1& x1, const X2& x2, const X3& x3, const X4& x4, const X5& x5, const X6& x6,
-        boost::optional<Matrix&> H1 = boost::none,
-        boost::optional<Matrix&> H2 = boost::none,
-        boost::optional<Matrix&> H3 = boost::none,
-        boost::optional<Matrix&> H4 = boost::none,
-        boost::optional<Matrix&> H5 = boost::none,
-        boost::optional<Matrix&> H6 = boost::none) const override {
+        OptionalMatrixType H1, OptionalMatrixType H2, OptionalMatrixType H3, OptionalMatrixType H4, 
+		OptionalMatrixType H5, OptionalMatrixType H6) const override {
     if(H1) {
       *H1 = (Matrix(1, 1) << 1.0).finished();
       *H2 = (Matrix(1, 1) << 2.0).finished();
@@ -567,7 +577,7 @@ TEST(NonlinearFactor, NoiseModelFactor6) {
   tv.insert(X(6), double((6.0)));
   EXPECT(assert_equal((Vector(1) << 91.0).finished(), tf.unwhitenedError(tv)));
   DOUBLES_EQUAL(0.5 * 91.0 * 91.0 / 4.0, tf.error(tv), 1e-9);
-  JacobianFactor jf(*boost::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
+  JacobianFactor jf(*std::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
   LONGS_EQUAL((long)X(1), (long)jf.keys()[0]);
   LONGS_EQUAL((long)X(2), (long)jf.keys()[1]);
   LONGS_EQUAL((long)X(3), (long)jf.keys()[2]);
@@ -588,16 +598,18 @@ TEST(NonlinearFactor, NoiseModelFactor6) {
 class TestFactorN : public NoiseModelFactorN<double, double, double, double> {
 public:
   typedef NoiseModelFactorN<double, double, double, double> Base;
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   using Type1 = ValueType<1>;  // Test that we can use the ValueType<> template
 
   TestFactorN() : Base(noiseModel::Diagonal::Sigmas((Vector(1) << 2.0).finished()), X(1), X(2), X(3), X(4)) {}
 
   Vector
     evaluateError(const double& x1, const double& x2, const double& x3, const double& x4,
-        boost::optional<Matrix&> H1 = boost::none,
-        boost::optional<Matrix&> H2 = boost::none,
-        boost::optional<Matrix&> H3 = boost::none,
-        boost::optional<Matrix&> H4 = boost::none) const override {
+        OptionalMatrixType H1, OptionalMatrixType H2,
+        OptionalMatrixType H3, OptionalMatrixType H4) const override {
     if (H1) *H1 = (Matrix(1, 1) << 1.0).finished();
     if (H2) *H2 = (Matrix(1, 1) << 2.0).finished();
     if (H3) *H3 = (Matrix(1, 1) << 3.0).finished();
@@ -618,7 +630,7 @@ TEST(NonlinearFactor, NoiseModelFactorN) {
   tv.insert(X(4), double((4.0)));
   EXPECT(assert_equal((Vector(1) << 30.0).finished(), tf.unwhitenedError(tv)));
   DOUBLES_EQUAL(0.5 * 30.0 * 30.0 / 4.0, tf.error(tv), 1e-9);
-  JacobianFactor jf(*boost::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
+  JacobianFactor jf(*std::dynamic_pointer_cast<JacobianFactor>(tf.linearize(tv)));
   LONGS_EQUAL((long)X(1), (long)jf.keys()[0]);
   LONGS_EQUAL((long)X(2), (long)jf.keys()[1]);
   LONGS_EQUAL((long)X(3), (long)jf.keys()[2]);

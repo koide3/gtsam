@@ -26,7 +26,9 @@
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Unit3.h>
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #include <boost/serialization/nvp.hpp>
+#endif
 
 namespace gtsam {
 
@@ -39,10 +41,10 @@ namespace gtsam {
  */
 class GTSAM_EXPORT EmptyCal {
  public:
-  enum { dimension = 0 };
+  inline constexpr static auto dimension = 0;
   EmptyCal() {}
   virtual ~EmptyCal() = default;
-  using shared_ptr = boost::shared_ptr<EmptyCal>;
+  using shared_ptr = std::shared_ptr<EmptyCal>;
 
   /// return DOF, dimensionality of tangent space
   inline static size_t Dim() { return dimension; }
@@ -52,6 +54,7 @@ class GTSAM_EXPORT EmptyCal {
   }
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION  ///
   /// Serialization function
   friend class boost::serialization::access;
   template <class Archive>
@@ -59,6 +62,7 @@ class GTSAM_EXPORT EmptyCal {
     ar& boost::serialization::make_nvp(
         "EmptyCal", boost::serialization::base_object<EmptyCal>(*this));
   }
+#endif
 };
 
 /**
@@ -69,7 +73,7 @@ class GTSAM_EXPORT EmptyCal {
  */
 class GTSAM_EXPORT SphericalCamera {
  public:
-  enum { dimension = 6 };
+  inline constexpr static auto dimension = 6;
 
   using Measurement = Unit3;
   using MeasurementVector = std::vector<Unit3>;
@@ -87,11 +91,11 @@ class GTSAM_EXPORT SphericalCamera {
 
   /// Default constructor
   SphericalCamera()
-      : pose_(Pose3()), emptyCal_(boost::make_shared<EmptyCal>()) {}
+      : pose_(Pose3()), emptyCal_(std::make_shared<EmptyCal>()) {}
 
   /// Constructor with pose
   explicit SphericalCamera(const Pose3& pose)
-      : pose_(pose), emptyCal_(boost::make_shared<EmptyCal>()) {}
+      : pose_(pose), emptyCal_(std::make_shared<EmptyCal>()) {}
 
   /// Constructor with empty intrinsics (needed for smart factors)
   explicit SphericalCamera(const Pose3& pose,
@@ -152,16 +156,16 @@ class GTSAM_EXPORT SphericalCamera {
    * @param point 3D point in world coordinates
    * @return the intrinsic coordinates of the projected point
    */
-  Unit3 project2(const Point3& pw, OptionalJacobian<2, 6> Dpose = boost::none,
-                 OptionalJacobian<2, 3> Dpoint = boost::none) const;
+  Unit3 project2(const Point3& pw, OptionalJacobian<2, 6> Dpose = {},
+                 OptionalJacobian<2, 3> Dpoint = {}) const;
 
   /** Project point into the image
    * (note: there is no CheiralityException for a spherical camera)
    * @param point 3D direction in world coordinates
    * @return the intrinsic coordinates of the projected point
    */
-  Unit3 project2(const Unit3& pwu, OptionalJacobian<2, 6> Dpose = boost::none,
-                 OptionalJacobian<2, 2> Dpoint = boost::none) const;
+  Unit3 project2(const Unit3& pwu, OptionalJacobian<2, 6> Dpose = {},
+                 OptionalJacobian<2, 2> Dpoint = {}) const;
 
   /// backproject a 2-dimensional point to a 3-dimensional point at given depth
   Point3 backproject(const Unit3& p, const double depth) const;
@@ -174,16 +178,16 @@ class GTSAM_EXPORT SphericalCamera {
    * @param point 3D point in world coordinates
    * @return the intrinsic coordinates of the projected point
    */
-  Unit3 project(const Point3& point, OptionalJacobian<2, 6> Dpose = boost::none,
-                OptionalJacobian<2, 3> Dpoint = boost::none) const;
+  Unit3 project(const Point3& point, OptionalJacobian<2, 6> Dpose = {},
+                OptionalJacobian<2, 3> Dpoint = {}) const;
 
   /** Compute reprojection error for a given 3D point in world coordinates
    * @param point 3D point in world coordinates
    * @return the tangent space error between the projection and the measurement
    */
   Vector2 reprojectionError(const Point3& point, const Unit3& measured,
-                            OptionalJacobian<2, 6> Dpose = boost::none,
-                            OptionalJacobian<2, 3> Dpoint = boost::none) const;
+                            OptionalJacobian<2, 6> Dpose = {},
+                            OptionalJacobian<2, 3> Dpoint = {}) const;
   /// @}
 
   /// move a cameras according to d
@@ -219,12 +223,14 @@ class GTSAM_EXPORT SphericalCamera {
   static size_t Dim() { return 6; }
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template <class Archive>
   void serialize(Archive& ar, const unsigned int /*version*/) {
     ar& BOOST_SERIALIZATION_NVP(pose_);
   }
+#endif
 
  public:
   GTSAM_MAKE_ALIGNED_OPERATOR_NEW
@@ -232,9 +238,9 @@ class GTSAM_EXPORT SphericalCamera {
 // end of class SphericalCamera
 
 template <>
-struct traits<SphericalCamera> : public internal::LieGroup<Pose3> {};
+struct traits<SphericalCamera> : public internal::Manifold<SphericalCamera> {};
 
 template <>
-struct traits<const SphericalCamera> : public internal::LieGroup<Pose3> {};
+struct traits<const SphericalCamera> : public internal::Manifold<SphericalCamera> {};
 
 }  // namespace gtsam

@@ -27,7 +27,6 @@
 #include <gtsam/linear/GaussianBayesNet.h>
 #include <gtsam/hybrid/HybridValues.h>
 
-#include <boost/make_shared.hpp>
 
 #include <iostream>
 #include <sstream>
@@ -442,7 +441,7 @@ TEST(GaussianConditional, likelihood) {
 
 /* ************************************************************************* */
 // Test sampling
-TEST(GaussianConditional, sample) {
+TEST(GaussianConditional, Sample) {
   Matrix A1 = (Matrix(2, 2) << 1., 2., 3., 4.).finished();
   const Vector2 b(20, 40), x1(3, 4);
   const double sigma = 0.01;
@@ -465,8 +464,14 @@ TEST(GaussianConditional, sample) {
   std::mt19937_64 rng(4242);
   auto actual3 = conditional.sample(given, &rng);
   EXPECT_LONGS_EQUAL(1, actual2.size());
-  // regression is not repeatable across platforms/versions :-(
-  // EXPECT(assert_equal(Vector2(31.0111856, 64.9850775), actual2[X(0)], 1e-5));
+  // regressions
+#if __APPLE__
+EXPECT(assert_equal(Vector2(31.0111856, 64.9850775), actual2[X(0)], 1e-5));
+#elif _WIN32
+  EXPECT(assert_equal(Vector2(30.995317, 64.9943165), actual2[X(0)], 1e-5));
+#elif __linux__
+  EXPECT(assert_equal(Vector2(30.9809331, 64.9927588), actual2[X(0)], 1e-5));
+#endif
 }
 
 /* ************************************************************************* */
@@ -487,16 +492,17 @@ TEST(GaussianConditional, Error) {
 
 /* ************************************************************************* */
 // Similar test for multivariate gaussian but with sigma 2.0
-TEST(GaussianConditional, LogNormalizationConstant) {
+TEST(GaussianConditional, NegLogConstant) {
   double sigma = 2.0;
   auto conditional = GaussianConditional::FromMeanAndStddev(X(0), Vector3::Zero(), sigma);
   VectorValues x;
   x.insert(X(0), Vector3::Zero());
   Matrix3 Sigma = I_3x3 * sigma * sigma;
-  double expectedLogNormalizingConstant = log(1 / sqrt((2 * M_PI * Sigma).determinant()));
+  double expectedNegLogConstant =
+      -log(1 / sqrt((2 * M_PI * Sigma).determinant()));
 
-  EXPECT_DOUBLES_EQUAL(expectedLogNormalizingConstant,
-                       conditional.logNormalizationConstant(), 1e-9);
+  EXPECT_DOUBLES_EQUAL(expectedNegLogConstant, conditional.negLogConstant(),
+                       1e-9);
 }
 
 /* ************************************************************************* */
@@ -517,6 +523,7 @@ TEST(GaussianConditional, Print) {
     "  d = [ 20 40 ]\n"
     "  mean: 1 elements\n"
     "  x0: 20 40\n"
+    "  logNormalizationConstant: -4.0351\n"
     "isotropic dim=2 sigma=3\n";
   EXPECT(assert_print_equal(expected, conditional, "GaussianConditional"));
 
@@ -531,6 +538,7 @@ TEST(GaussianConditional, Print) {
     "  S[x1] = [ -1 -2 ]\n"
     "          [ -3 -4 ]\n"
     "  d = [ 20 40 ]\n"
+    "  logNormalizationConstant: -4.0351\n"
     "isotropic dim=2 sigma=3\n";
   EXPECT(assert_print_equal(expected1, conditional1, "GaussianConditional"));
 
@@ -546,6 +554,7 @@ TEST(GaussianConditional, Print) {
     "  S[y1] = [ -5 -6 ]\n"
     "          [ -7 -8 ]\n"
     "  d = [ 20 40 ]\n"
+    "  logNormalizationConstant: -4.0351\n"
     "isotropic dim=2 sigma=3\n";
   EXPECT(assert_print_equal(expected2, conditional2, "GaussianConditional"));
 }

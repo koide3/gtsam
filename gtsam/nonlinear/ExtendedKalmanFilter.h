@@ -44,18 +44,12 @@ namespace gtsam {
 template <class VALUE>
 class ExtendedKalmanFilter {
   // Check that VALUE type is a testable Manifold
-  BOOST_CONCEPT_ASSERT((IsTestable<VALUE>));
-  BOOST_CONCEPT_ASSERT((IsManifold<VALUE>));
+  GTSAM_CONCEPT_ASSERT(IsTestable<VALUE>);
+  GTSAM_CONCEPT_ASSERT(IsManifold<VALUE>);
 
  public:
-  typedef boost::shared_ptr<ExtendedKalmanFilter<VALUE> > shared_ptr;
+  typedef std::shared_ptr<ExtendedKalmanFilter<VALUE> > shared_ptr;
   typedef VALUE T;
-
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-  //@deprecated: any NoiseModelFactor will do, as long as they have the right keys
-  typedef NoiseModelFactorN<VALUE, VALUE> MotionFactor;
-  typedef NoiseModelFactorN<VALUE> MeasurementFactor;
-#endif
 
  protected:
   T x_;                                     // linearization point

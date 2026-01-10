@@ -49,6 +49,7 @@
 #include <gtsam/slam/dataset.h>
 
 #include <cstring>
+#include <cassert>
 #include <fstream>
 #include <iostream>
 
@@ -82,7 +83,7 @@ po::variables_map parseOptions(int argc, char* argv[]) {
   return vm;
 }
 
-boost::shared_ptr<PreintegratedCombinedMeasurements::Params> imuParams() {
+std::shared_ptr<PreintegratedCombinedMeasurements::Params> imuParams() {
   // We use the sensor specs to build the noise model for the IMU factor.
   double accel_noise_sigma = 0.0003924;
   double gyro_noise_sigma = 0.000205689024915;

@@ -23,13 +23,14 @@
 #include <gtsam/base/types.h>
 #include <gtsam/discrete/Assignment.h>
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #include <boost/serialization/nvp.hpp>
-#include <boost/shared_ptr.hpp>
+#endif
+#include <memory>
 #include <functional>
 #include <iostream>
 #include <map>
 #include <set>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -37,9 +38,23 @@
 namespace gtsam {
 
   /**
-   * Decision Tree
-   * L = label for variables
-   * Y = function range (any algebra), e.g., bool, int, double
+   * @brief a decision tree is a function from assignments to values.
+   * @tparam L label for variables
+   * @tparam Y function range (any algebra), e.g., bool, int, double
+   * 
+   * After creating a decision tree on some variables, the tree can be evaluated
+   * on an assignment to those variables. Example:
+   * 
+   * @code{.cpp}
+   * // Create a decision stump one one variable 'a' with values 10 and 20.
+   * DecisionTree<char, int> tree('a', 10, 20);
+   * 
+   * // Evaluate the tree on an assignment to the variable.
+   * int value0 = tree({{'a', 0}}); // value0 = 10
+   * int value1 = tree({{'a', 1}}); // value1 = 20
+   * @endcode
+   * 
+   * More examples can be found in testDecisionTree.cpp
    *
    * @ingroup discrete
    */
@@ -70,7 +85,7 @@ namespace gtsam {
 
     /** ------------------------ Node base class --------------------------- */
     struct Node {
-      using Ptr = boost::shared_ptr<const Node>;
+      using Ptr = std::shared_ptr<Node>;
 
 #ifdef DT_DEBUG_MEMORY
       static int nrNodes;
@@ -117,10 +132,12 @@ namespace gtsam {
       virtual bool isLeaf() const = 0;
 
      private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
       /** Serialization function */
       friend class boost::serialization::access;
       template <class ARCHIVE>
       void serialize(ARCHIVE& ar, const unsigned int /*version*/) {}
+#endif
     };
     /** ------------------------ Node base class --------------------------- */
 
@@ -132,11 +149,33 @@ namespace gtsam {
     NodePtr root_;
 
    protected:
-    /** Internal recursive function to create from keys, cardinalities, 
+    /**
+     * Internal recursive function to create from keys, cardinalities, 
      * and Y values 
      */
-    template<typename It, typename ValueIt>
-    NodePtr create(It begin, It end, ValueIt beginY, ValueIt endY) const;
+    template <typename It, typename ValueIt>
+    static NodePtr build(It begin, It end, ValueIt beginY, ValueIt endY);
+
+    /**
+     * Internal helper function to create a tree from keys, cardinalities, and Y
+     * values. Calls `build` which builds the tree bottom-up, before we prune in
+     * a top-down fashion.
+     */
+    template <typename It, typename ValueIt>
+    static NodePtr create(It begin, It end, ValueIt beginY, ValueIt endY);
+
+    /**
+     * @brief Convert from a DecisionTree<L, X> to DecisionTree<L, Y>.
+     *
+     * @tparam M The previous label type.
+     * @tparam X The previous value type.
+     * @param f The node pointer to the root of the previous DecisionTree.
+     * @param Y_of_X Functor to convert from value type X to type Y.
+     * @return NodePtr
+     */
+    template <typename X>
+    static NodePtr convertFrom(const typename DecisionTree<L, X>::NodePtr& f,
+                               std::function<Y(const X&)> Y_of_X);
 
     /**
      * @brief Convert from a DecisionTree<M, X> to DecisionTree<L, Y>.
@@ -149,9 +188,9 @@ namespace gtsam {
      * @return NodePtr 
      */
     template <typename M, typename X>
-    NodePtr convertFrom(const typename DecisionTree<M, X>::NodePtr& f,
-                        std::function<L(const M&)> L_of_M,
-                        std::function<Y(const X&)> Y_of_X) const;
+    static NodePtr convertFrom(const typename DecisionTree<M, X>::NodePtr& f,
+                               std::function<L(const M&)> L_of_M,
+                               std::function<Y(const X&)> Y_of_X);
 
    public:
     /// @name Standard Constructors
@@ -163,7 +202,13 @@ namespace gtsam {
     /** Create a constant */
     explicit DecisionTree(const Y& y);
 
-    /// Create tree with 2 assignments `y1`, `y2`, splitting on variable `label`
+    /**
+     * @brief Create tree with 2 assignments `y1`, `y2`, splitting on variable `label`
+     * 
+     * @param label The variable to split on.
+     * @param y1 The value for the first assignment.
+     * @param y2 The value for the second assignment.
+     */
     DecisionTree(const L& label, const Y& y1, const Y& y2);
 
     /** Allow Label+Cardinality for convenience */
@@ -184,6 +229,15 @@ namespace gtsam {
                  const DecisionTree& f1);
 
     /**
+     * @brief Move constructor for DecisionTree. Very efficient as does not
+     * allocate anything, just changes in-place. But `other` is consumed.
+     *
+     * @param op The unary operation to apply to the moved DecisionTree.
+     * @param other The DecisionTree to move from, will be empty afterwards.
+     */
+    DecisionTree(const Unary& op, DecisionTree&& other) noexcept;
+
+    /**
      * @brief Convert from a different value type.
      *
      * @tparam X The previous value type.
@@ -194,7 +248,7 @@ namespace gtsam {
     DecisionTree(const DecisionTree<L, X>& other, Func Y_of_X);
 
     /**
-     * @brief Convert from a different value type X to value type Y, also transate
+     * @brief Convert from a different value type X to value type Y, also translate
      * labels via map from type M to L.
      *
      * @tparam M Previous label type.
@@ -339,6 +393,13 @@ namespace gtsam {
       return DecisionTree(newRoot);
     }
 
+    /** Choose multiple values. */
+    DecisionTree restrict(const Assignment<L>& assignment) const {
+      NodePtr newRoot = root_;
+      for (const auto& [l, v] : assignment) newRoot = newRoot->choose(l, v);
+      return DecisionTree(newRoot);
+    }
+
     /** combine subtrees on key with binary operation "op" */
     DecisionTree combine(const L& label, size_t cardinality,
                          const Binary& op) const;
@@ -361,6 +422,18 @@ namespace gtsam {
                     const ValueFormatter& valueFormatter,
                     bool showZero = true) const;
 
+    /**
+     * @brief Convert into two trees with value types A and B.
+     *
+     * @tparam A First new value type.
+     * @tparam B Second new value type.
+     * @param AB_of_Y Functor to convert from type X to std::pair<A, B>.
+     * @return A pair of DecisionTrees with value types A and B respectively.
+     */
+    template <typename A, typename B>
+    std::pair<DecisionTree<L, A>, DecisionTree<L, B>> split(
+        std::function<std::pair<A, B>(const Y&)> AB_of_Y) const;
+
     /// @name Advanced Interface
     /// @{
 
@@ -369,17 +442,19 @@ namespace gtsam {
 
     // internal use only
     template<typename Iterator> NodePtr
-    compose(Iterator begin, Iterator end, const L& label) const;
+    static compose(Iterator begin, Iterator end, const L& label);
 
     /// @}
 
    private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template <class ARCHIVE>
     void serialize(ARCHIVE& ar, const unsigned int /*version*/) {
       ar& BOOST_SERIALIZATION_NVP(root_);
     }
+#endif
   };  // DecisionTree
 
   template <class L, class Y>
@@ -418,10 +493,10 @@ namespace gtsam {
   template <typename L, typename T1, typename T2>
   std::pair<DecisionTree<L, T1>, DecisionTree<L, T2> > unzip(
       const DecisionTree<L, std::pair<T1, T2> >& input) {
-    return std::make_pair(
+    return {
         DecisionTree<L, T1>(input, [](std::pair<T1, T2> i) { return i.first; }),
-        DecisionTree<L, T2>(input,
-                            [](std::pair<T1, T2> i) { return i.second; }));
+        DecisionTree<L, T2>(input, [](std::pair<T1, T2> i) { return i.second; })
+    };
   }
 
 }  // namespace gtsam

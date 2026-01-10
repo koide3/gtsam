@@ -49,13 +49,14 @@ void PreintegratedAhrsMeasurements::resetIntegration() {
 //------------------------------------------------------------------------------
 void PreintegratedAhrsMeasurements::integrateMeasurement(
     const Vector3& measuredOmega, double deltaT) {
+  Matrix3 Fr;
+  PreintegratedRotation::integrateGyroMeasurement(measuredOmega, biasHat_,
+                                                  deltaT, &Fr);
 
-  Matrix3 D_incrR_integratedOmega, Fr;
-  PreintegratedRotation::integrateMeasurement(measuredOmega,
-      biasHat_, deltaT, &D_incrR_integratedOmega, &Fr);
-
-  // first order uncertainty propagation
-  // the deltaT allows to pass from continuous time noise to discrete time noise
+  // First order uncertainty propagation
+  // The deltaT allows to pass from continuous time noise to discrete time
+  // noise. Comparing with the IMUFactor.cpp implementation, the latter is an
+  // approximation for C * (wCov / dt) * C.transpose(), with C \approx I * dt.
   preintMeasCov_ = Fr * preintMeasCov_ * Fr.transpose() + p().gyroscopeCovariance * deltaT;
 }
 
@@ -98,7 +99,7 @@ AHRSFactor::AHRSFactor(
 
 gtsam::NonlinearFactor::shared_ptr AHRSFactor::clone() const {
 //------------------------------------------------------------------------------
-  return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+  return std::static_pointer_cast<gtsam::NonlinearFactor>(
       gtsam::NonlinearFactor::shared_ptr(new This(*this)));
 }
 
@@ -119,8 +120,8 @@ bool AHRSFactor::equals(const NonlinearFactor& other, double tol) const {
 
 //------------------------------------------------------------------------------
 Vector AHRSFactor::evaluateError(const Rot3& Ri, const Rot3& Rj,
-    const Vector3& bias, boost::optional<Matrix&> H1,
-    boost::optional<Matrix&> H2, boost::optional<Matrix&> H3) const {
+    const Vector3& bias, OptionalMatrixType H1,
+    OptionalMatrixType H2, OptionalMatrixType H3) const {
 
   // Do bias correction, if (H3) will contain 3*3 derivative used below
   const Vector3 biascorrectedOmega = _PIM_.predict(bias, H3);
@@ -185,11 +186,11 @@ Rot3 AHRSFactor::Predict(const Rot3& rot_i, const Vector3& bias,
 AHRSFactor::AHRSFactor(Key rot_i, Key rot_j, Key bias,
                        const PreintegratedAhrsMeasurements& pim,
                        const Vector3& omegaCoriolis,
-                       const boost::optional<Pose3>& body_P_sensor)
+                       const std::optional<Pose3>& body_P_sensor)
     : Base(noiseModel::Gaussian::Covariance(pim.preintMeasCov_), rot_i, rot_j,
            bias),
       _PIM_(pim) {
-  auto p = boost::make_shared<PreintegratedAhrsMeasurements::Params>(pim.p());
+  auto p = std::make_shared<PreintegratedAhrsMeasurements::Params>(pim.p());
   p->body_P_sensor = body_P_sensor;
   _PIM_.p_ = p;
 }
@@ -198,8 +199,8 @@ AHRSFactor::AHRSFactor(Key rot_i, Key rot_j, Key bias,
 Rot3 AHRSFactor::predict(const Rot3& rot_i, const Vector3& bias,
                          const PreintegratedAhrsMeasurements& pim,
                          const Vector3& omegaCoriolis,
-                         const boost::optional<Pose3>& body_P_sensor) {
-  auto p = boost::make_shared<PreintegratedAhrsMeasurements::Params>(pim.p());
+                         const std::optional<Pose3>& body_P_sensor) {
+  auto p = std::make_shared<PreintegratedAhrsMeasurements::Params>(pim.p());
   p->omegaCoriolis = omegaCoriolis;
   p->body_P_sensor = body_P_sensor;
   PreintegratedAhrsMeasurements newPim = pim;

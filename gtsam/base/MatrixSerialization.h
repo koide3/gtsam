@@ -18,10 +18,13 @@
 
 // \callgraph
 
+// Defined only if boost serialization is enabled
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #pragma once
 
 #include <gtsam/base/Matrix.h>
 
+#include <Eigen/Sparse>
 #include <boost/serialization/array.hpp>
 #include <boost/serialization/nvp.hpp>
 #include <boost/serialization/split_free.hpp>
@@ -85,5 +88,45 @@ void serialize(Archive& ar, gtsam::Matrix& m, const unsigned int version) {
   split_free(ar, m, version);
 }
 
+/******************************************************************************/
+/// Customized functions for serializing Eigen::SparseVector
+template <class Archive, typename _Scalar, int _Options, typename _Index>
+void save(Archive& ar, const Eigen::SparseVector<_Scalar, _Options, _Index>& m,
+          const unsigned int /*version*/) {
+  _Index size = m.size();
+
+  std::vector<std::pair<Eigen::Index, _Scalar>> data;
+  for (typename Eigen::SparseVector<_Scalar, _Options, _Index>::InnerIterator
+           it(m);
+       it; ++it)
+    data.push_back({it.index(), it.value()});
+
+  ar << BOOST_SERIALIZATION_NVP(size);
+  ar << BOOST_SERIALIZATION_NVP(data);
+}
+
+template <class Archive, typename _Scalar, int _Options, typename _Index>
+void load(Archive& ar, Eigen::SparseVector<_Scalar, _Options, _Index>& m,
+          const unsigned int /*version*/) {
+  _Index size;
+  ar >> BOOST_SERIALIZATION_NVP(size);
+  m.resize(size);
+
+  std::vector<std::pair<Eigen::Index, _Scalar>> data;
+  ar >> BOOST_SERIALIZATION_NVP(data);
+
+  for (auto&& d : data) {
+    m.coeffRef(d.first) = d.second;
+  }
+}
+
+template <class Archive, typename _Scalar, int _Options, typename _Index>
+void serialize(Archive& ar, Eigen::SparseVector<_Scalar, _Options, _Index>& m,
+               const unsigned int version) {
+  split_free(ar, m, version);
+}
+/******************************************************************************/
+
 }  // namespace serialization
 }  // namespace boost
+#endif

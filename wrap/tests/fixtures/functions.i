@@ -11,11 +11,11 @@ pair<gtsam::NonlinearFactorGraph*, gtsam::Values*> load2D(string filename, Test*
 pair<gtsam::NonlinearFactorGraph*, gtsam::Values*> load2D(string filename, const gtsam::noiseModel::Diagonal* model, int maxID, bool addNoise, bool smart);
 pair<gtsam::NonlinearFactorGraph*, gtsam::Values*> load2D(string filename, gtsam::noiseModel::Diagonal@ model);
 
-Vector aGlobalFunction();
+gtsam::Vector aGlobalFunction();
 
 // An overloaded global function
-Vector overloadedGlobalFunction(int a);
-Vector overloadedGlobalFunction(int a, double b);
+gtsam::Vector overloadedGlobalFunction(int a);
+gtsam::Vector overloadedGlobalFunction(int a, double b);
 
 // A templated free/global function. Multiple templates supported.
 template<T1 = {string, double}, T2 = {size_t}, R = {double}>
@@ -36,3 +36,7 @@ void DefaultFuncVector(const std::vector<int> &i = {1, 2, 3}, const std::vector<
 
 // Test for non-trivial default constructor
 void setPose(const gtsam::Pose3& pose = gtsam::Pose3());
+
+std::pair<gtsam::DiscreteConditional*, gtsam::DecisionTreeFactor*>
+EliminateDiscrete(const gtsam::DiscreteFactorGraph& factors,
+                  const gtsam::Ordering& frontalKeys);

@@ -27,7 +27,6 @@
 // Using numerical derivative to calculate d(Pose3::Expmap)/dw
 #include <gtsam/base/numericalDerivative.h>
 
-#include <boost/optional.hpp>
 
 #include <ostream>
 
@@ -105,12 +104,15 @@ private:
 
   Matrix Jacobian_wrt_t0_Overall_;
 
-  boost::optional<POSE> body_P_sensor_;   // The pose of the sensor in the body frame
+  std::optional<POSE> body_P_sensor_;   // The pose of the sensor in the body frame
 
 public:
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   // shorthand for a smart pointer to a factor
-  typedef typename boost::shared_ptr<EquivInertialNavFactor_GlobalVel_NoBias> shared_ptr;
+  typedef typename std::shared_ptr<EquivInertialNavFactor_GlobalVel_NoBias> shared_ptr;
 
   /** default constructor - only use for serialization */
   EquivInertialNavFactor_GlobalVel_NoBias() {}
@@ -121,7 +123,7 @@ public:
       double dt12, const Vector world_g, const Vector world_rho,
       const Vector& world_omega_earth, const noiseModel::Gaussian::shared_ptr& model_equivalent,
       const Matrix& Jacobian_wrt_t0_Overall,
-      boost::optional<POSE> body_P_sensor = boost::none) :
+      std::optional<POSE> body_P_sensor = {}) :
         Base(model_equivalent, Pose1, Vel1, Pose2, Vel2),
         delta_pos_in_t0_(delta_pos_in_t0), delta_vel_in_t0_(delta_vel_in_t0), delta_angles_(delta_angles),
         dt12_(dt12), world_g_(world_g), world_rho_(world_rho), world_omega_earth_(world_omega_earth), Jacobian_wrt_t0_Overall_(Jacobian_wrt_t0_Overall),
@@ -270,10 +272,8 @@ public:
   }
 
   Vector evaluateError(const POSE& Pose1, const VELOCITY& Vel1, const POSE& Pose2, const VELOCITY& Vel2,
-      boost::optional<Matrix&> H1 = boost::none,
-      boost::optional<Matrix&> H2 = boost::none,
-      boost::optional<Matrix&> H3 = boost::none,
-      boost::optional<Matrix&> H4 = boost::none) const {
+      OptionalMatrixType H1, OptionalMatrixType H2, OptionalMatrixType H3,
+      OptionalMatrixType H4) const {
 
     // TODO: Write analytical derivative calculations
     // Jacobian w.r.t. Pose1
@@ -351,7 +351,7 @@ public:
       Vector& delta_pos_in_t0, Vector3& delta_angles, Vector& delta_vel_in_t0, double& delta_t,
       const noiseModel::Gaussian::shared_ptr& model_continuous_overall,
       Matrix& EquivCov_Overall, Matrix& Jacobian_wrt_t0_Overall,
-      boost::optional<POSE> p_body_P_sensor = boost::none){
+      std::optional<POSE> p_body_P_sensor = {}){
     // Note: all delta terms refer to an IMU\sensor system at t0
     // Note: Earth-related terms are not accounted here but are incorporated in predict functions.
 
@@ -573,6 +573,7 @@ public:
     }
 private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template<class ARCHIVE>
@@ -580,6 +581,7 @@ private:
     ar & boost::serialization::make_nvp("NonlinearFactor2",
         boost::serialization::base_object<Base>(*this));
   }
+#endif
 
 
 

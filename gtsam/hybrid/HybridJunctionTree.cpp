@@ -22,6 +22,7 @@
 #include <gtsam/inference/Key.h>
 
 #include <unordered_map>
+#include <cassert>
 
 namespace gtsam {
 
@@ -50,23 +51,23 @@ struct HybridConstructorTraversalData {
 
   // Pre-order visitor function
   static HybridConstructorTraversalData ConstructorTraversalVisitorPre(
-      const boost::shared_ptr<HybridEliminationTree::Node>& node,
+      const std::shared_ptr<HybridEliminationTree::Node>& node,
       HybridConstructorTraversalData& parentData) {
     // On the pre-order pass, before children have been visited, we just set up
     // a traversal data structure with its own JT node, and create a child
     // pointer in its parent.
     HybridConstructorTraversalData data =
         HybridConstructorTraversalData(&parentData);
-    data.junctionTreeNode = boost::make_shared<Node>(node->key, node->factors);
+    data.junctionTreeNode = std::make_shared<Node>(node->key, node->factors);
     parentData.junctionTreeNode->addChild(data.junctionTreeNode);
 
     // Add all the discrete keys in the hybrid factors to the current data
     for (const auto& f : node->factors) {
-      if (auto hf = boost::dynamic_pointer_cast<HybridFactor>(f)) {
+      if (auto hf = std::dynamic_pointer_cast<HybridFactor>(f)) {
         for (auto& k : hf->discreteKeys()) {
           data.discreteKeys.insert(k.first);
         }
-      } else if (auto hf = boost::dynamic_pointer_cast<DecisionTreeFactor>(f)) {
+      } else if (auto hf = std::dynamic_pointer_cast<DiscreteFactor>(f)) {
         for (auto& k : hf->discreteKeys()) {
           data.discreteKeys.insert(k.first);
         }
@@ -78,7 +79,7 @@ struct HybridConstructorTraversalData {
 
   // Post-order visitor function
   static void ConstructorTraversalVisitorPost(
-      const boost::shared_ptr<HybridEliminationTree::Node>& node,
+      const std::shared_ptr<HybridEliminationTree::Node>& node,
       const HybridConstructorTraversalData& data) {
     // In this post-order visitor, we combine the symbolic elimination results
     // from the elimination tree children and symbolically eliminate the current
@@ -94,15 +95,13 @@ struct HybridConstructorTraversalData {
     symbolicFactors.reserve(node->factors.size() +
                             data.childSymbolicFactors.size());
     // Add ETree node factors
-    symbolicFactors += node->factors;
+    symbolicFactors.push_back(node->factors);
     // Add symbolic factors passed up from children
-    symbolicFactors += data.childSymbolicFactors;
+    symbolicFactors.push_back(data.childSymbolicFactors);
 
     Ordering keyAsOrdering;
     keyAsOrdering.push_back(node->key);
-    SymbolicConditional::shared_ptr conditional;
-    SymbolicFactor::shared_ptr separatorFactor;
-    boost::tie(conditional, separatorFactor) =
+    const auto [conditional, separatorFactor] =
         internal::EliminateSymbolic(symbolicFactors, keyAsOrdering);
 
     // Store symbolic elimination results in the parent
@@ -129,9 +128,9 @@ struct HybridConstructorTraversalData {
       // Check if we should merge the i^th child
       if (nrParents + nrFrontals == childConditionals[i]->nrParents()) {
         const bool myType =
-            data.discreteKeys.exists(conditional->frontals()[0]);
+            data.discreteKeys.exists(conditional->frontals().front());
         const bool theirType =
-            data.discreteKeys.exists(childConditionals[i]->frontals()[0]);
+            data.discreteKeys.exists(childConditionals[i]->frontals().front());
 
         if (myType == theirType) {
           // Increment number of frontal variables
@@ -162,8 +161,8 @@ HybridJunctionTree::HybridJunctionTree(
   typedef HybridConstructorTraversalData Data;
   Data rootData(0);
   rootData.junctionTreeNode =
-      boost::make_shared<typename Base::Node>();  // Make a dummy node to gather
-                                                  // the junction tree roots
+      std::make_shared<typename Base::Node>();  // Make a dummy node to gather
+                                                // the junction tree roots
   treeTraversal::DepthFirstForest(eliminationTree, rootData,
                                   Data::ConstructorTraversalVisitorPre,
                                   Data::ConstructorTraversalVisitorPost);

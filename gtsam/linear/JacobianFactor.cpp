@@ -31,14 +31,8 @@
 #include <gtsam/base/FastMap.h>
 #include <gtsam/base/cholesky.h>
 
-#include <boost/format.hpp>
-#include <boost/make_shared.hpp>
-#include <boost/array.hpp>
-#include <boost/range/algorithm/copy.hpp>
-#include <boost/range/adaptor/indirected.hpp>
-#include <boost/range/adaptor/map.hpp>
-
 #include <cmath>
+#include <cassert>
 #include <sstream>
 #include <stdexcept>
 
@@ -47,8 +41,8 @@ using namespace std;
 namespace gtsam {
 
 // Typedefs used in constructors below.
-using Dims = std::vector<Eigen::Index>;
-using Pairs = std::vector<std::pair<Eigen::Index, Matrix>>;
+using Dims = std::vector<Key>;
+using Pairs = std::vector<std::pair<Key, Matrix>>;
 
 /* ************************************************************************* */
 JacobianFactor::JacobianFactor() :
@@ -101,9 +95,7 @@ JacobianFactor::JacobianFactor(const HessianFactor& factor)
   Ab_.full() = factor.info().selfadjointView();
 
   // Do Cholesky to get a Jacobian
-  size_t maxrank;
-  bool success;
-  boost::tie(maxrank, success) = choleskyCareful(Ab_.matrix());
+  const auto [maxrank, success] = choleskyCareful(Ab_.matrix());
 
   // Check that Cholesky succeeded OR it managed to factor the full Hessian.
   // THe latter case occurs with non-positive definite matrices arising from QP.
@@ -120,10 +112,32 @@ JacobianFactor::JacobianFactor(const HessianFactor& factor)
   }
 }
 
+  /* ************************************************************************* */
+void JacobianFactor::checkAb(const SharedDiagonal& model,
+                             const VerticalBlockMatrix& augmentedMatrix) const {
+  // Check noise model dimension
+  if (model && (DenseIndex)model->dim() != augmentedMatrix.rows())
+    throw InvalidNoiseModel(augmentedMatrix.rows(), model->dim());
+
+  // Check number of variables
+  if ((DenseIndex)Base::keys_.size() != augmentedMatrix.nBlocks() - 1)
+    throw std::invalid_argument(
+        "Error in JacobianFactor constructor input. Number of provided keys "
+        "plus one for the RHS vector must equal the number of provided "
+        "matrix blocks.");
+
+  // Check RHS dimension
+  if (augmentedMatrix(augmentedMatrix.nBlocks() - 1).cols() != 1)
+    throw std::invalid_argument(
+        "Error in JacobianFactor constructor input. The last provided "
+        "matrix block must be the RHS vector, but the last provided block "
+        "had more than one column.");
+}
+
 /* ************************************************************************* */
 // Helper functions for combine constructor
 namespace {
-boost::tuple<FastVector<DenseIndex>, DenseIndex, DenseIndex> _countDims(
+std::tuple<FastVector<DenseIndex>, DenseIndex, DenseIndex> _countDims(
     const FastVector<JacobianFactor::shared_ptr>& factors,
     const FastVector<VariableSlots::const_iterator>& variableSlots) {
   gttic(countDims);
@@ -189,7 +203,7 @@ boost::tuple<FastVector<DenseIndex>, DenseIndex, DenseIndex> _countDims(
   }
 #endif
 
-  return boost::make_tuple(varDims, m, n);
+  return std::make_tuple(varDims, m, n);
 }
 
 /* ************************************************************************* */
@@ -200,11 +214,11 @@ FastVector<JacobianFactor::shared_ptr> _convertOrCastToJacobians(
   jacobians.reserve(factors.size());
   for(const GaussianFactor::shared_ptr& factor: factors) {
     if (factor) {
-      if (JacobianFactor::shared_ptr jf = boost::dynamic_pointer_cast<
+      if (JacobianFactor::shared_ptr jf = std::dynamic_pointer_cast<
           JacobianFactor>(factor))
         jacobians.push_back(jf);
       else
-        jacobians.push_back(boost::make_shared<JacobianFactor>(*factor));
+        jacobians.push_back(std::make_shared<JacobianFactor>(*factor));
     }
   }
   return jacobians;
@@ -220,18 +234,16 @@ void JacobianFactor::JacobianFactorHelper(const GaussianFactorGraph& graph,
       graph);
 
   // Count dimensions
-  FastVector<DenseIndex> varDims;
-  DenseIndex m, n;
-  boost::tie(varDims, m, n) = _countDims(jacobians, orderedSlots);
+  const auto [varDims, m, n] = _countDims(jacobians, orderedSlots);
 
   // Allocate matrix and copy keys in order
   gttic(allocate);
   Ab_ = VerticalBlockMatrix(varDims, m, true); // Allocate augmented matrix
   Base::keys_.resize(orderedSlots.size());
-  boost::range::copy(
-      // Get variable keys
-      orderedSlots | boost::adaptors::indirected | boost::adaptors::map_keys,
-      Base::keys_.begin());
+  // Copy keys in order
+  std::transform(orderedSlots.begin(), orderedSlots.end(),
+      Base::keys_.begin(),
+      [](const VariableSlots::const_iterator& it) {return it->first;});
   gttoc(allocate);
 
   // Loop over slots in combined factor and copy blocks from source factors
@@ -264,7 +276,7 @@ void JacobianFactor::JacobianFactorHelper(const GaussianFactorGraph& graph,
   // Copy the RHS vectors and sigmas
   gttic(copy_vectors);
   bool anyConstrained = false;
-  boost::optional<Vector> sigmas;
+  std::optional<Vector> sigmas;
   // Loop over source jacobians
   DenseIndex nextRow = 0;
   for (size_t factorI = 0; factorI < jacobians.size(); ++factorI) {
@@ -416,7 +428,7 @@ void JacobianFactor::print(const string& s,
   if (!s.empty())
     cout << s << "\n";
   for (const_iterator key = begin(); key != end(); ++key) {
-    cout << boost::format("  A[%1%] = ") % formatter(*key);
+    cout << "  A[" << formatter(*key) << "] = ";
     cout << getA(key).format(matlabFormat()) << endl;
   }
   cout << formatMatrixIndented("  b = ", getb(), true) << "\n";
@@ -590,16 +602,19 @@ void JacobianFactor::updateHessian(const KeyVector& infoKeys,
     // Ab_ is the augmented Jacobian matrix A, and we perform I += A'*A below
     DenseIndex n = Ab_.nBlocks() - 1, N = info->nBlocks() - 1;
 
+    // Pre-calculate slots
+    vector<DenseIndex> slots(n + 1);
+    for (DenseIndex j = 0; j < n; ++j) slots[j] = Slot(infoKeys, keys_[j]);
+    slots[n] = N;
+
     // Apply updates to the upper triangle
     // Loop over blocks of A, including RHS with j==n
-    vector<DenseIndex> slots(n+1);
     for (DenseIndex j = 0; j <= n; ++j) {
       Eigen::Block<const Matrix> Ab_j = Ab_(j);
-      const DenseIndex J = (j == n) ? N : Slot(infoKeys, keys_[j]);
-      slots[j] = J;
+      const DenseIndex J = slots[j];
       // Fill off-diagonal blocks with Ai'*Aj
       for (DenseIndex i = 0; i < j; ++i) {
-        const DenseIndex I = slots[i];  // because i<j, slots[i] is valid.
+        const DenseIndex I = slots[i];
         info->updateOffDiagonalBlock(I, J, Ab_(i).transpose() * Ab_j);
       }
       // Fill diagonal block with Aj'*Aj
@@ -792,7 +807,7 @@ std::pair<GaussianConditional::shared_ptr, JacobianFactor::shared_ptr> Eliminate
   // Combine and sort variable blocks in elimination order
   JacobianFactor::shared_ptr jointFactor;
   try {
-    jointFactor = boost::make_shared<JacobianFactor>(factors, keys);
+    jointFactor = std::make_shared<JacobianFactor>(factors, keys);
   } catch (std::invalid_argument&) {
     throw InvalidDenseElimination(
         "EliminateQR was called with a request to eliminate variables that are not\n"
@@ -812,8 +827,6 @@ std::pair<GaussianConditional::shared_ptr, JacobianFactor::shared_ptr> Eliminate
     // The inplace variant will have no valid rows anymore below m==n
     // and only entries above the diagonal are valid.
     inplace_QR(Ab.matrix());
-    // We zero below the diagonal to agree with the result from noieModel QR
-    Ab.matrix().triangularView<Eigen::StrictlyLower>().setZero();
     size_t m = Ab.rows(), n = Ab.cols() - 1;
     size_t maxRank = min(m, n);
     jointFactor->model_ = noiseModel::Unit::Create(maxRank);
@@ -855,7 +868,7 @@ GaussianConditional::shared_ptr JacobianFactor::splitConditional(size_t nrFronta
   conditionalNoiseModel =
       noiseModel::Diagonal::Sigmas(model_->sigmas().segment(Ab_.rowStart(), Ab_.rows()));
   GaussianConditional::shared_ptr conditional =
-      boost::make_shared<GaussianConditional>(Base::keys_, nrFrontals, Ab_, conditionalNoiseModel);
+      std::make_shared<GaussianConditional>(Base::keys_, nrFrontals, Ab_, conditionalNoiseModel);
 
   const DenseIndex maxRemainingRows =
       std::min(Ab_.cols(), originalRowEnd) - Ab_.rowStart() - frontalDim;

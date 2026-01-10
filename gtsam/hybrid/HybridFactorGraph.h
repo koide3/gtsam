@@ -22,7 +22,6 @@
 #include <gtsam/hybrid/HybridFactor.h>
 #include <gtsam/inference/FactorGraph.h>
 
-#include <boost/format.hpp>
 #include <unordered_map>
 
 namespace gtsam {
@@ -30,17 +29,17 @@ namespace gtsam {
 class DiscreteFactor;
 class Ordering;
 
-using SharedFactor = boost::shared_ptr<Factor>;
+using SharedFactor = std::shared_ptr<Factor>;
 
 /**
  * Hybrid Factor Graph
  * Factor graph with utilities for hybrid factors.
  */
-class HybridFactorGraph : public FactorGraph<Factor> {
+class GTSAM_EXPORT HybridFactorGraph : public FactorGraph<Factor> {
  public:
   using Base = FactorGraph<Factor>;
-  using This = HybridFactorGraph;              ///< this class
-  using shared_ptr = boost::shared_ptr<This>;  ///< shared_ptr to This
+  using This = HybridFactorGraph;            ///< this class
+  using shared_ptr = std::shared_ptr<This>;  ///< shared_ptr to This
 
   using Values = gtsam::Values;  ///< backwards compatibility
   using Indices = KeyVector;     ///> map from keys to values
@@ -60,6 +59,10 @@ class HybridFactorGraph : public FactorGraph<Factor> {
   template <class DERIVEDFACTOR>
   HybridFactorGraph(const FactorGraph<DERIVEDFACTOR>& graph) : Base(graph) {}
 
+  /** Construct from container of factors (shared_ptr or plain objects) */
+  template <class CONTAINER>
+  explicit HybridFactorGraph(const CONTAINER& factors) : Base(factors) {}
+
   /// @}
   /// @name Extra methods to inspect discrete/continuous keys.
   /// @{
@@ -67,11 +70,8 @@ class HybridFactorGraph : public FactorGraph<Factor> {
   /// Get all the discrete keys in the factor graph.
   std::set<DiscreteKey> discreteKeys() const;
 
-  /// Get all the discrete keys in the factor graph, as a set.
+  /// Get all the discrete keys in the factor graph, as a set of Keys.
   KeySet discreteKeySet() const;
-
-  /// Get a map from Key to corresponding DiscreteKey.
-  std::unordered_map<Key, DiscreteKey> discreteKeyMap() const;
 
   /// Get all the continuous keys in the factor graph.
   const KeySet continuousKeySet() const;

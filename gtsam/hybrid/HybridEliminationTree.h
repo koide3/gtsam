@@ -35,9 +35,9 @@ class GTSAM_EXPORT HybridEliminationTree
 
  public:
   typedef EliminationTree<HybridBayesNet, HybridGaussianFactorGraph>
-      Base;                                    ///< Base class
-  typedef HybridEliminationTree This;          ///< This class
-  typedef boost::shared_ptr<This> shared_ptr;  ///< Shared pointer to this class
+      Base;                                  ///< Base class
+  typedef HybridEliminationTree This;        ///< This class
+  typedef std::shared_ptr<This> shared_ptr;  ///< Shared pointer to this class
 
   /// @name Constructors
   /// @{

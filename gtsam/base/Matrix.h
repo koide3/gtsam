@@ -26,7 +26,6 @@
 
 #include <gtsam/base/OptionalJacobian.h>
 #include <gtsam/base/Vector.h>
-#include <boost/tuple/tuple.hpp>
 
 #include <vector>
 
@@ -133,12 +132,6 @@ GTSAM_EXPORT bool linear_independent(const Matrix& A, const Matrix& B, double to
  */
 GTSAM_EXPORT bool linear_dependent(const Matrix& A, const Matrix& B, double tol = 1e-9);
 
-/**
- * overload ^ for trans(A)*v
- * We transpose the vectors for speed.
- */
-GTSAM_EXPORT Vector operator^(const Matrix& A, const Vector & v);
-
 /** products using old-style format to improve compatibility */
 template<class MATRIX>
 inline MATRIX prod(const MATRIX& A, const MATRIX&B) {
@@ -224,19 +217,6 @@ const typename MATRIX::ConstRowXpr row(const MATRIX& A, size_t j) {
 }
 
 /**
- * Zeros all of the elements below the diagonal of a matrix, in place
- * @param A is a matrix, to be modified in place
- * @param cols is the number of columns to zero, use zero for all columns
- */
-template<class MATRIX>
-void zeroBelowDiagonal(MATRIX& A, size_t cols=0) {
-  const size_t m = A.rows(), n = A.cols();
-  const size_t k = (cols) ? std::min(cols, std::min(m,n)) : std::min(m,n);
-  for (size_t j=0; j<k; ++j)
-    A.col(j).segment(j+1, m-(j+1)).setZero();
-}
-
-/**
  * static transpose function, just calls Eigen transpose member function
  */
 inline Matrix trans(const Matrix& A) { return A.transpose(); }
@@ -280,7 +260,7 @@ struct Reshape<N, M, InOptions, M, N, InOptions> {
 
 template <int OutM, int OutN, int OutOptions, int InM, int InN, int InOptions>
 inline typename Reshape<OutM, OutN, OutOptions, InM, InN, InOptions>::ReshapedType reshape(const Eigen::Matrix<double, InM, InN, InOptions> & m){
-  BOOST_STATIC_ASSERT(InM * InN == OutM * OutN);
+  static_assert(InM * InN == OutM * OutN);
   return Reshape<OutM, OutN, OutOptions, InM, InN, InOptions>::reshape(m);
 }
 
@@ -307,7 +287,7 @@ GTSAM_EXPORT void inplace_QR(Matrix& A);
  * @param sigmas is a vector of the measurement standard deviation
  * @return list of r vectors, d  and sigma
  */
-GTSAM_EXPORT std::list<boost::tuple<Vector, double, double> >
+GTSAM_EXPORT std::list<std::tuple<Vector, double, double> >
 weighted_eliminate(Matrix& A, Vector& b, const Vector& sigmas);
 
 /**
@@ -434,7 +414,7 @@ GTSAM_EXPORT void svd(const Matrix& A, Matrix& U, Vector& S, Matrix& V);
  * Returns rank of A, minimum error (singular value),
  * and corresponding eigenvector (column of V, with A=U*S*V')
  */
-GTSAM_EXPORT boost::tuple<int, double, Vector>
+GTSAM_EXPORT std::tuple<int, double, Vector>
 DLT(const Matrix& A, double rank_tol = 1e-9);
 
 /**
@@ -459,8 +439,8 @@ struct MultiplyWithInverse {
 
   /// A.inverse() * b, with optional derivatives
   VectorN operator()(const MatrixN& A, const VectorN& b,
-                     OptionalJacobian<N, N* N> H1 = boost::none,
-                     OptionalJacobian<N, N> H2 = boost::none) const {
+                     OptionalJacobian<N, N* N> H1 = {},
+                     OptionalJacobian<N, N> H2 = {}) const {
     const MatrixN invA = A.inverse();
     const VectorN c = invA * b;
     // The derivative in A is just -[c[0]*invA c[1]*invA ... c[N-1]*invA]
@@ -480,7 +460,7 @@ struct MultiplyWithInverse {
  */
 template <typename T, int N>
 struct MultiplyWithInverseFunction {
-  enum { M = traits<T>::dimension };
+  inline constexpr static auto M = traits<T>::dimension;
   typedef Eigen::Matrix<double, N, 1> VectorN;
   typedef Eigen::Matrix<double, N, N> MatrixN;
 
@@ -495,16 +475,16 @@ struct MultiplyWithInverseFunction {
 
   /// f(a).inverse() * b, with optional derivatives
   VectorN operator()(const T& a, const VectorN& b,
-                     OptionalJacobian<N, M> H1 = boost::none,
-                     OptionalJacobian<N, N> H2 = boost::none) const {
+                     OptionalJacobian<N, M> H1 = {},
+                     OptionalJacobian<N, N> H2 = {}) const {
     MatrixN A;
-    phi_(a, b, boost::none, A);  // get A = f(a) by calling f once
+    phi_(a, b, {}, A);  // get A = f(a) by calling f once
     const MatrixN invA = A.inverse();
     const VectorN c = invA * b;
 
     if (H1) {
       Eigen::Matrix<double, N, M> H;
-      phi_(a, c, H, boost::none);  // get derivative H of forward mapping
+      phi_(a, c, H, {});  // get derivative H of forward mapping
       *H1 = -invA* H;
     }
     if (H2) *H2 = invA;

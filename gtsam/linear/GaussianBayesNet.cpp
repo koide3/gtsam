@@ -20,14 +20,11 @@
 #include <gtsam/linear/GaussianBayesNet.h>
 #include <gtsam/linear/GaussianFactorGraph.h>
 
-#include <boost/range/adaptor/reversed.hpp>
 #include <fstream>
+#include <iterator>
 
 using namespace std;
 using namespace gtsam;
-
-// In Wrappers we have no access to this so have a default ready
-static std::mt19937_64 kRandomNumberGenerator(42);
 
 namespace gtsam {
 
@@ -50,11 +47,11 @@ namespace gtsam {
     VectorValues solution = given;
     // (R*x)./sigmas = y by solving x=inv(R)*(y.*sigmas)
     // solve each node in reverse topological sort order (parents first)
-    for (auto cg : boost::adaptors::reverse(*this)) {
+    for (auto it = std::make_reverse_iterator(end()); it != std::make_reverse_iterator(begin()); ++it) {
       // i^th part of R*x=y, x=inv(R)*y
       // (Rii*xi + R_i*x(i+1:))./si = yi =>
       // xi = inv(Rii)*(yi.*si - R_i*x(i+1:))
-      solution.insert(cg->solve(solution));
+      solution.insert((*it)->solve(solution));
     }
     return solution;
   }
@@ -69,20 +66,11 @@ namespace gtsam {
                                         std::mt19937_64* rng) const {
     VectorValues result(given);
     // sample each node in reverse topological sort order (parents first)
-    for (auto cg : boost::adaptors::reverse(*this)) {
-      const VectorValues sampled = cg->sample(result, rng);
+    for (auto it = std::make_reverse_iterator(end()); it != std::make_reverse_iterator(begin()); ++it) {
+      const VectorValues sampled = (*it)->sample(result, rng);
       result.insert(sampled);
     }
     return result;
-  }
-
-  /* ************************************************************************ */
-  VectorValues GaussianBayesNet::sample() const {
-    return sample(&kRandomNumberGenerator);
-  }
-
-  VectorValues GaussianBayesNet::sample(const VectorValues& given) const {
-    return sample(given, &kRandomNumberGenerator);
   }
 
   /* ************************************************************************ */
@@ -131,8 +119,8 @@ namespace gtsam {
     VectorValues result;
     // TODO this looks pretty sketchy. result is passed as the parents argument
     //  as it's filled up by solving the gaussian conditionals.
-    for (auto cg: boost::adaptors::reverse(*this)) {
-      result.insert(cg->solveOtherRHS(result, rhs));
+    for (auto it = std::make_reverse_iterator(end()); it != std::make_reverse_iterator(begin()); ++it) {
+      result.insert((*it)->solveOtherRHS(result, rhs));
     }
     return result;
   }
@@ -240,6 +228,27 @@ namespace gtsam {
       logDet += cg->logDeterminant();
     }
     return logDet;
+  }
+
+  /* ************************************************************************* */
+  double GaussianBayesNet::negLogConstant() const {
+    /*
+    normalization constant = 1.0 / sqrt((2*pi)^n*det(Sigma))
+    negLogConstant = -log(normalizationConstant)
+      = 0.5 * n*log(2*pi) + 0.5 * log(det(Sigma))
+
+    log(det(Sigma)) = -2.0 * logDeterminant()
+    thus, negLogConstant = 0.5*n*log(2*pi) - logDeterminant()
+
+    BayesNet negLogConstant = sum(0.5*n_i*log(2*pi) - logDeterminant_i())
+    = sum(0.5*n_i*log(2*pi)) + sum(logDeterminant_i())
+    = sum(0.5*n_i*log(2*pi)) + bn->logDeterminant()
+    */
+    double negLogNormConst = 0.0;
+    for (const sharedConditional& cg : *this) {
+      negLogNormConst += cg->negLogConstant();
+    }
+    return negLogNormConst;
   }
 
   /* ************************************************************************* */

@@ -32,6 +32,10 @@ namespace gtsam {
   public:
     typedef VALUE T;
 
+    // Provide access to the Matrix& version of evaluateError:
+    using NoiseModelFactor1<VALUE>::evaluateError;
+
+
   private:
 
     typedef NoiseModelFactorN<VALUE> Base;
@@ -44,7 +48,7 @@ namespace gtsam {
   public:
 
     /// shorthand for a smart pointer to a factor
-    typedef typename boost::shared_ptr<PriorFactor<VALUE> > shared_ptr;
+    typedef typename std::shared_ptr<PriorFactor<VALUE> > shared_ptr;
 
     /// Typedef to this class
     typedef PriorFactor<VALUE> This;
@@ -66,7 +70,7 @@ namespace gtsam {
 
     /// @return a deep copy of this factor
     gtsam::NonlinearFactor::shared_ptr clone() const override {
-      return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+      return std::static_pointer_cast<gtsam::NonlinearFactor>(
           gtsam::NonlinearFactor::shared_ptr(new This(*this))); }
 
     /** implement functions needed for Testable */
@@ -91,7 +95,7 @@ namespace gtsam {
     /** implement functions needed to derive from Factor */
 
     /** vector of errors */
-    Vector evaluateError(const T& x, boost::optional<Matrix&> H = boost::none) const override {
+    Vector evaluateError(const T& x, OptionalMatrixType H) const override {
       if (H) (*H) = Matrix::Identity(traits<T>::GetDimension(x),traits<T>::GetDimension(x));
       // manifold equivalent of z-x -> Local(x,z)
       return -traits<T>::Local(x, prior_);
@@ -101,6 +105,7 @@ namespace gtsam {
 
   private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
@@ -110,11 +115,12 @@ namespace gtsam {
           boost::serialization::base_object<Base>(*this));
       ar & BOOST_SERIALIZATION_NVP(prior_);
     }
+#endif
 
-	// Alignment, see https://eigen.tuxfamily.org/dox/group__TopicStructHavingEigenMembers.html
-	enum { NeedsToAlign = (sizeof(T) % 16) == 0 };
+  // Alignment, see https://eigen.tuxfamily.org/dox/group__TopicStructHavingEigenMembers.html
+  inline constexpr static auto NeedsToAlign = (sizeof(T) % 16) == 0;
   public:
-	GTSAM_MAKE_ALIGNED_OPERATOR_NEW_IF(NeedsToAlign)
+  GTSAM_MAKE_ALIGNED_OPERATOR_NEW_IF(NeedsToAlign)
   };
 
   /// traits

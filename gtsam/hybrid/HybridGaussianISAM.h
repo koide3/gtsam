@@ -24,10 +24,13 @@
 #include <gtsam/hybrid/HybridGaussianFactorGraph.h>
 #include <gtsam/inference/ISAM.h>
 
+#include <optional>
+
 namespace gtsam {
 
 /**
- * @brief 
+ * @brief Incremental Smoothing and Mapping (ISAM) algorithm
+ * for hybrid factor graphs.
  *
  * @ingroup hybrid
  */
@@ -35,7 +38,7 @@ class GTSAM_EXPORT HybridGaussianISAM : public ISAM<HybridBayesTree> {
  public:
   typedef ISAM<HybridBayesTree> Base;
   typedef HybridGaussianISAM This;
-  typedef boost::shared_ptr<This> shared_ptr;
+  typedef std::shared_ptr<This> shared_ptr;
 
   /// @name Standard Constructors
   /// @{
@@ -53,8 +56,8 @@ class GTSAM_EXPORT HybridGaussianISAM : public ISAM<HybridBayesTree> {
   void updateInternal(
       const HybridGaussianFactorGraph& newFactors,
       HybridBayesTree::Cliques* orphans,
-      const boost::optional<size_t>& maxNrLeaves = boost::none,
-      const boost::optional<Ordering>& ordering = boost::none,
+      const std::optional<size_t>& maxNrLeaves = {},
+      const std::optional<Ordering>& ordering = {},
       const HybridBayesTree::Eliminate& function =
           HybridBayesTree::EliminationTraitsType::DefaultEliminate);
 
@@ -68,8 +71,8 @@ class GTSAM_EXPORT HybridGaussianISAM : public ISAM<HybridBayesTree> {
    * @param function Elimination function.
    */
   void update(const HybridGaussianFactorGraph& newFactors,
-              const boost::optional<size_t>& maxNrLeaves = boost::none,
-              const boost::optional<Ordering>& ordering = boost::none,
+              const std::optional<size_t>& maxNrLeaves = {},
+              const std::optional<Ordering>& ordering = {},
               const HybridBayesTree::Eliminate& function =
                   HybridBayesTree::EliminationTraitsType::DefaultEliminate);
 

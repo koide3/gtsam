@@ -39,8 +39,8 @@ namespace gtsam {
     typedef BayesNet<GaussianConditional> Base;
     typedef GaussianBayesNet This;
     typedef GaussianConditional ConditionalType;
-    typedef boost::shared_ptr<This> shared_ptr;
-    typedef boost::shared_ptr<ConditionalType> sharedConditional;
+    typedef std::shared_ptr<This> shared_ptr;
+    typedef std::shared_ptr<ConditionalType> sharedConditional;
 
     /// @name Standard Constructors
     /// @{
@@ -71,11 +71,8 @@ namespace gtsam {
      */
     template <class DERIVEDCONDITIONAL>
     GaussianBayesNet(
-        std::initializer_list<boost::shared_ptr<DERIVEDCONDITIONAL> > conditionals)
+        std::initializer_list<std::shared_ptr<DERIVEDCONDITIONAL> > conditionals)
         : Base(conditionals) {}
-
-    /// Destructor
-    virtual ~GaussianBayesNet() = default;
 
     /// @}
 
@@ -84,6 +81,12 @@ namespace gtsam {
 
     /** Check equality */
     bool equals(const This& bn, double tol = 1e-9) const;
+
+    /// Check exact equality.
+    friend bool operator==(const GaussianBayesNet& lhs,
+                           const GaussianBayesNet& rhs) {
+      return lhs.isEqual(rhs);
+    }
 
     /// print graph
     void print(
@@ -128,7 +131,7 @@ namespace gtsam {
      *   std::mt19937_64 rng(42);
      *   auto sample = gbn.sample(&rng);
      */
-    VectorValues sample(std::mt19937_64* rng) const;
+    VectorValues sample(std::mt19937_64* rng = nullptr) const;
 
     /**
      * Sample from an incomplete BayesNet, given missing variables
@@ -137,13 +140,7 @@ namespace gtsam {
      *   VectorValues given = ...;
      *   auto sample = gbn.sample(given, &rng);
      */
-    VectorValues sample(const VectorValues& given, std::mt19937_64* rng) const;
-
-    /// Sample using ancestral sampling, use default rng
-    VectorValues sample() const;
-
-    /// Sample from an incomplete BayesNet, use default rng
-    VectorValues sample(const VectorValues& given) const;
+    VectorValues sample(const VectorValues& given, std::mt19937_64* rng = nullptr) const;
 
     /**
      * Return ordering corresponding to a topological sort.
@@ -232,6 +229,14 @@ namespace gtsam {
     double logDeterminant() const;
 
     /**
+     * @brief Get the negative log of the normalization constant corresponding
+     * to the joint Gaussian density represented by this Bayes net.
+     *
+     * @return double
+     */
+    double negLogConstant() const;
+
+    /**
      * Backsubstitute with a different RHS vector than the one stored in this BayesNet.
      * gy=inv(R*inv(Sigma))*gx
      */
@@ -256,12 +261,14 @@ namespace gtsam {
     /// @}
 
   private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
     void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
       ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(Base);
     }
+#endif
   };
 
   /// traits

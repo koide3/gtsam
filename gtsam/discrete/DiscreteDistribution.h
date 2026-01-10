@@ -40,7 +40,7 @@ class GTSAM_EXPORT DiscreteDistribution : public DiscreteConditional {
   /// Default constructor needed for serialization.
   DiscreteDistribution() {}
 
-  /// Constructor from factor.
+  /// Constructor from DecisionTreeFactor.
   explicit DiscreteDistribution(const DecisionTreeFactor& f)
       : Base(f.size(), f) {}
 
@@ -93,12 +93,6 @@ class GTSAM_EXPORT DiscreteDistribution : public DiscreteConditional {
   std::vector<double> pmf() const;
 
   /// @}
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-  /// @name Deprecated functionality
-  /// @{
-  size_t GTSAM_DEPRECATED solve() const { return Base::solve({}); }
-  /// @}
-#endif
 };
 // DiscreteDistribution
 

@@ -48,15 +48,13 @@ class GTSAM_EXPORT HybridBayesTreeClique
   typedef HybridBayesTreeClique This;
   typedef BayesTreeCliqueBase<HybridBayesTreeClique, HybridGaussianFactorGraph>
       Base;
-  typedef boost::shared_ptr<This> shared_ptr;
-  typedef boost::weak_ptr<This> weak_ptr;
+  typedef std::shared_ptr<This> shared_ptr;
+  typedef std::weak_ptr<This> weak_ptr;
   HybridBayesTreeClique() {}
-  HybridBayesTreeClique(const boost::shared_ptr<HybridConditional>& conditional)
+  HybridBayesTreeClique(const std::shared_ptr<HybridConditional>& conditional)
       : Base(conditional) {}
   ///< Copy constructor
   HybridBayesTreeClique(const HybridBayesTreeClique& clique) : Base(clique) {}
-
-  virtual ~HybridBayesTreeClique() {}
 };
 
 /* ************************************************************************* */
@@ -67,7 +65,7 @@ class GTSAM_EXPORT HybridBayesTree : public BayesTree<HybridBayesTreeClique> {
 
  public:
   typedef HybridBayesTree This;
-  typedef boost::shared_ptr<This> shared_ptr;
+  typedef std::shared_ptr<This> shared_ptr;
 
   /// @name Standard interface
   /// @{
@@ -86,6 +84,9 @@ class GTSAM_EXPORT HybridBayesTree : public BayesTree<HybridBayesTreeClique> {
    */
   GaussianBayesTree choose(const DiscreteValues& assignment) const;
 
+  /** Error for all conditionals. */
+  double error(const HybridValues& values) const;
+
   /**
    * @brief Optimize the hybrid Bayes tree by computing the MPE for the current
    * set of discrete variables and using it to compute the best continuous
@@ -98,11 +99,19 @@ class GTSAM_EXPORT HybridBayesTree : public BayesTree<HybridBayesTreeClique> {
   /**
    * @brief Recursively optimize the BayesTree to produce a vector solution.
    *
-   * @param assignment The discrete values assignment to select the Gaussian
-   * mixtures.
+   * @param assignment The discrete values assignment to select
+   * the hybrid conditional.
    * @return VectorValues
    */
   VectorValues optimize(const DiscreteValues& assignment) const;
+
+  /**
+   * @brief Compute the Most Probable Explanation (MPE)
+   * of the discrete variables.
+   *
+   * @return DiscreteValues
+   */
+  DiscreteValues mpe() const;
 
   /**
    * @brief Prune the underlying Bayes tree.
@@ -114,15 +123,25 @@ class GTSAM_EXPORT HybridBayesTree : public BayesTree<HybridBayesTreeClique> {
   /// @}
 
  private:
+  /// Helper method to compute the max product assignment
+  /// given a DiscreteFactorGraph
+  DiscreteValues discreteMaxProduct(const DiscreteFactorGraph& dfg) const;
+
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template <class ARCHIVE>
   void serialize(ARCHIVE& ar, const unsigned int /*version*/) {
     ar& BOOST_SERIALIZATION_BASE_OBJECT_NVP(Base);
   }
+#endif
 };
 
 /// traits
+template <>
+struct traits<HybridBayesTreeClique> : public Testable<HybridBayesTreeClique> {
+};
+
 template <>
 struct traits<HybridBayesTree> : public Testable<HybridBayesTree> {};
 
@@ -142,14 +161,14 @@ class BayesTreeOrphanWrapper<HybridBayesTreeClique> : public HybridConditional {
   typedef HybridBayesTreeClique CliqueType;
   typedef HybridConditional Base;
 
-  boost::shared_ptr<CliqueType> clique;
+  std::shared_ptr<CliqueType> clique;
 
   /**
    * @brief Construct a new Bayes Tree Orphan Wrapper object.
    *
    * @param clique Bayes tree clique.
    */
-  BayesTreeOrphanWrapper(const boost::shared_ptr<CliqueType>& clique)
+  BayesTreeOrphanWrapper(const std::shared_ptr<CliqueType>& clique)
       : clique(clique) {
     // Store parent keys in our base type factor so that eliminating those
     // parent keys will pull this subtree into the elimination.
@@ -163,7 +182,7 @@ class BayesTreeOrphanWrapper<HybridBayesTreeClique> : public HybridConditional {
   void print(
       const std::string& s = "",
       const KeyFormatter& formatter = DefaultKeyFormatter) const override {
-    clique->print(s + "stored clique", formatter);
+    clique->print(s + " stored clique ", formatter);
   }
 };
 

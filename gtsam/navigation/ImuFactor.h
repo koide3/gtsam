@@ -37,13 +37,9 @@ typedef ManifoldPreintegration PreintegrationType;
 
 /*
  * If you are using the factor, please cite:
- * L. Carlone, Z. Kira, C. Beall, V. Indelman, F. Dellaert, "Eliminating
- * conditionally independent sets in factor graphs: a unifying perspective based
- * on smart factors", Int. Conf. on Robotics and Automation (ICRA), 2014.
- *
- * C. Forster, L. Carlone, F. Dellaert, D. Scaramuzza, "IMU Preintegration on
- * Manifold for Efficient Visual-Inertial Maximum-a-Posteriori Estimation",
- * Robotics: Science and Systems (RSS), 2015.
+ * Christian Forster, Luca Carlone, Frank Dellaert, and Davide Scaramuzza,
+ * "On-Manifold Preintegration for Real-Time Visual-Inertial Odometry", IEEE
+ * Transactions on Robotics, 2017.
  *
  * REFERENCES:
  * [1] G.S. Chirikjian, "Stochastic Models, Information Theory, and Lie Groups",
@@ -54,8 +50,8 @@ typedef ManifoldPreintegration PreintegrationType;
  * [3] L. Carlone, S. Williams, R. Roberts, "Preintegrated IMU factor:
  *     Computation of the Jacobian Matrices", Tech. Report, 2013.
  *     Available in this repo as "PreintegratedIMUJacobians.pdf".
- * [4] C. Forster, L. Carlone, F. Dellaert, D. Scaramuzza, "IMU Preintegration on
- *     Manifold for Efficient Visual-Inertial Maximum-a-Posteriori Estimation",
+ * [4] C. Forster, L. Carlone, F. Dellaert, D. Scaramuzza, "IMU Preintegration
+ * on Manifold for Efficient Visual-Inertial Maximum-a-Posteriori Estimation",
  *     Robotics: Science and Systems (RSS), 2015.
  */
 
@@ -83,7 +79,7 @@ public:
 
   /// Default constructor for serialization and wrappers
   PreintegratedImuMeasurements() {
-    preintMeasCov_.setZero();
+    resetIntegration();
   }
 
  /**
@@ -91,10 +87,10 @@ public:
    *  @param p       Parameters, typically fixed in a single application
    *  @param biasHat Current estimate of acceleration and rotation rate biases
    */
-  PreintegratedImuMeasurements(const boost::shared_ptr<PreintegrationParams>& p,
+  PreintegratedImuMeasurements(const std::shared_ptr<PreintegrationParams>& p,
       const imuBias::ConstantBias& biasHat = imuBias::ConstantBias()) :
       PreintegrationType(p, biasHat) {
-    preintMeasCov_.setZero();
+    resetIntegration();
   }
 
 /**
@@ -105,6 +101,7 @@ public:
   PreintegratedImuMeasurements(const PreintegrationType& base, const Matrix9& preintMeasCov)
      : PreintegrationType(base),
        preintMeasCov_(preintMeasCov) {
+    PreintegrationType::resetIntegration();
   }
 
   /// Virtual destructor
@@ -117,7 +114,7 @@ public:
   /// equals
   bool equals(const PreintegratedImuMeasurements& expected, double tol = 1e-9) const;
 
-  /// Re-initialize PreintegratedIMUMeasurements
+  /// Re-initialize PreintegratedImuMeasurements
   void resetIntegration() override;
 
   /**
@@ -146,6 +143,7 @@ public:
 #endif
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION  ///
   /// Serialization function
   friend class boost::serialization::access;
   template<class ARCHIVE>
@@ -154,6 +152,7 @@ public:
     ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(PreintegrationType);
     ar & BOOST_SERIALIZATION_NVP(preintMeasCov_);
   }
+#endif
 };
 
 /**
@@ -161,7 +160,7 @@ public:
  * the vehicle at previous time step), current state (pose and velocity at
  * current time step), and the bias estimate. Following the preintegration
  * scheme proposed in [2], the ImuFactor includes many IMU measurements, which
- * are "summarized" using the PreintegratedIMUMeasurements class.
+ * are "summarized" using the PreintegratedImuMeasurements class.
  * Note that this factor does not model "temporal consistency" of the biases
  * (which are usually slowly varying quantities), which is up to the caller.
  * See also CombinedImuFactor for a class that does this for you.
@@ -180,11 +179,14 @@ private:
 
 public:
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   /** Shorthand for a smart pointer to a factor */
 #if !defined(_MSC_VER) && __GNUC__ == 4 && __GNUC_MINOR__ > 5
-  typedef typename boost::shared_ptr<ImuFactor> shared_ptr;
+  typedef typename std::shared_ptr<ImuFactor> shared_ptr;
 #else
-  typedef boost::shared_ptr<ImuFactor> shared_ptr;
+  typedef std::shared_ptr<ImuFactor> shared_ptr;
 #endif
 
   /** Default constructor - only use for serialization */
@@ -228,10 +230,8 @@ public:
   /// vector of errors
   Vector evaluateError(const Pose3& pose_i, const Vector3& vel_i,
       const Pose3& pose_j, const Vector3& vel_j,
-      const imuBias::ConstantBias& bias_i, boost::optional<Matrix&> H1 =
-          boost::none, boost::optional<Matrix&> H2 = boost::none,
-      boost::optional<Matrix&> H3 = boost::none, boost::optional<Matrix&> H4 =
-          boost::none, boost::optional<Matrix&> H5 = boost::none) const override;
+      const imuBias::ConstantBias& bias_i, OptionalMatrixType H1, OptionalMatrixType H2,
+      OptionalMatrixType H3, OptionalMatrixType H4, OptionalMatrixType H5) const override;
 
 #ifdef GTSAM_TANGENT_PREINTEGRATION
   /// Merge two pre-integrated measurement classes
@@ -245,6 +245,7 @@ public:
 
  private:
   /** Serialization function */
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   friend class boost::serialization::access;
   template<class ARCHIVE>
   void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
@@ -253,6 +254,7 @@ public:
          boost::serialization::base_object<Base>(*this));
     ar & BOOST_SERIALIZATION_NVP(_PIM_);
   }
+#endif
 };
 // class ImuFactor
 
@@ -269,6 +271,9 @@ private:
   PreintegratedImuMeasurements _PIM_;
 
 public:
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
 
   /** Default constructor - only use for serialization */
   ImuFactor2() {}
@@ -307,12 +312,12 @@ public:
   /// vector of errors
   Vector evaluateError(const NavState& state_i, const NavState& state_j,
                        const imuBias::ConstantBias& bias_i,  //
-                       boost::optional<Matrix&> H1 = boost::none,
-                       boost::optional<Matrix&> H2 = boost::none,
-                       boost::optional<Matrix&> H3 = boost::none) const override;
+                       OptionalMatrixType H1, OptionalMatrixType H2,
+                       OptionalMatrixType H3) const override;
 
 private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template<class ARCHIVE>
@@ -322,6 +327,7 @@ private:
          boost::serialization::base_object<Base>(*this));
     ar & BOOST_SERIALIZATION_NVP(_PIM_);
   }
+#endif
 };
 // class ImuFactor2
 

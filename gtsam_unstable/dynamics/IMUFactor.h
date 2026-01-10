@@ -10,7 +10,7 @@
 #include <gtsam/nonlinear/NonlinearFactor.h>
 #include <gtsam_unstable/dynamics/PoseRTV.h>
 
-#include <boost/bind/bind.hpp>
+#include <cassert>
 
 namespace gtsam {
 
@@ -33,6 +33,9 @@ protected:
 
 public:
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   /** Standard constructor */
   IMUFactor(const Vector3& accel, const Vector3& gyro,
       double dt, const Key& key1, const Key& key2, const SharedNoiseModel& model)
@@ -47,7 +50,7 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this))); }
 
   /** Check if two factors are equal */
@@ -77,8 +80,7 @@ public:
    *  z - h(x1,x2)
    */
   Vector evaluateError(const PoseRTV& x1, const PoseRTV& x2,
-      boost::optional<Matrix&> H1 = boost::none,
-      boost::optional<Matrix&> H2 = boost::none) const override {
+      OptionalMatrixType H1, OptionalMatrixType H2) const override {
     const Vector6 meas = z();
     if (H1) *H1 = numericalDerivative21<Vector6, PoseRTV, PoseRTV>(
         std::bind(This::predict_proxy, std::placeholders::_1, std::placeholders::_2, dt_, meas), x1, x2, 1e-5);
@@ -89,8 +91,7 @@ public:
 
   /** dummy version that fails for non-dynamic poses */
   virtual Vector evaluateError(const Pose3& x1, const Pose3& x2,
-      boost::optional<Matrix&> H1 = boost::none,
-      boost::optional<Matrix&> H2 = boost::none) const {
+      OptionalMatrixType H1, OptionalMatrixType H2) const {
     assert(false); // no corresponding factor here
     return Vector6::Zero();
   }

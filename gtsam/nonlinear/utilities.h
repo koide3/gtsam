@@ -285,7 +285,7 @@ void insertProjectionFactors(NonlinearFactorGraph& graph, Key i,
         "addMeasurements: J and Z must have same number of entries");
   for (int k = 0; k < Z.cols(); k++) {
     graph.push_back(
-        boost::make_shared<GenericProjectionFactor<Pose3, Point3> >(
+        std::make_shared<GenericProjectionFactor<Pose3, Point3> >(
             Point2(Z(0, k), Z(1, k)), model, i, Key(J(k)), K, body_P_sensor));
   }
 }
@@ -296,14 +296,14 @@ Matrix reprojectionErrors(const NonlinearFactorGraph& graph,
   // first count
   size_t K = 0, k = 0;
   for(const NonlinearFactor::shared_ptr& f: graph)
-    if (boost::dynamic_pointer_cast<const GenericProjectionFactor<Pose3, Point3> >(
+    if (std::dynamic_pointer_cast<const GenericProjectionFactor<Pose3, Point3> >(
         f))
       ++K;
   // now fill
   Matrix errors(2, K);
   for(const NonlinearFactor::shared_ptr& f: graph) {
-    boost::shared_ptr<const GenericProjectionFactor<Pose3, Point3> > p =
-        boost::dynamic_pointer_cast<const GenericProjectionFactor<Pose3, Point3> >(
+    std::shared_ptr<const GenericProjectionFactor<Pose3, Point3> > p =
+        std::dynamic_pointer_cast<const GenericProjectionFactor<Pose3, Point3> >(
             f);
     if (p)
       errors.col(k++) = p->unwhitenedError(values);
@@ -328,12 +328,12 @@ Values localToWorld(const Values& local, const Pose2& base,
       // if value is a Pose2, compose it with base pose
       Pose2 pose = local.at<Pose2>(key);
       world.insert(key, base.compose(pose));
-    } catch (const std::exception& e1) {
+    } catch ([[maybe_unused]] const std::exception& e1) {
       try {
         // if value is a Point2, transform it from base pose
         Point2 point = local.at<Point2>(key);
         world.insert(key, base.transformFrom(point));
-      } catch (const std::exception& e2) {
+      } catch ([[maybe_unused]]  const std::exception& e2) {
         // if not Pose2 or Point2, do nothing
         #ifndef NDEBUG
           std::cerr << "Values[key] is neither Pose2 nor Point2, so skip" << std::endl;

@@ -20,7 +20,6 @@
 #ifdef GTSAM_USE_QUATERNIONS
 
 #include <gtsam/geometry/Rot3.h>
-#include <boost/math/constants/constants.hpp>
 #include <cmath>
 
 using namespace std;
@@ -115,6 +114,12 @@ namespace gtsam {
     if (H2) *H2 = R;
     const Vector3 r = R * p;
     return Point3(r.x(), r.y(), r.z());
+  }
+
+  /* ************************************************************************* */
+  Rot3 Rot3::Expmap(const Vector3& v, OptionalJacobian<3,3> H) {
+    if(H) *H = Rot3::ExpmapDerivative(v);
+    return traits<gtsam::Quaternion>::Expmap(v);
   }
 
   /* ************************************************************************* */

@@ -1,5 +1,3 @@
-
-
 #include <pybind11/eigen.h>
 #include <pybind11/stl_bind.h>
 #include <pybind11/pybind11.h>
@@ -7,10 +5,6 @@
 #include "gtsam/nonlinear/utilities.h"  // for RedirectCout.
 
 #include "folder/path/to/Test.h"
-
-#include "wrap/serialization.h"
-#include <boost/serialization/export.hpp>
-
 
 
 
@@ -96,6 +90,15 @@ PYBIND11_MODULE(class_py, m_) {
         .def(py::init<const string&>(), py::arg("arg"))
         .def(py::init<const int&>(), py::arg("arg"))
         .def(py::init<const double&>(), py::arg("arg"));
+
+    py::class_<FastSet, std::shared_ptr<FastSet>>(m_, "FastSet")
+        .def(py::init<>())
+        .def("__len__",[](FastSet* self){return std::distance(self->begin(), self->end());})
+        .def("__contains__",[](FastSet* self, size_t key){return std::find(self->begin(), self->end(), key) != self->end();}, py::arg("key"))
+        .def("__iter__",[](FastSet* self){return py::make_iterator(self->begin(), self->end());});
+
+    py::class_<HessianFactor, gtsam::GaussianFactor, std::shared_ptr<HessianFactor>>(m_, "HessianFactor")
+        .def(py::init<const gtsam::KeyVector&, const std::vector<gtsam::Matrix>&, const std::vector<gtsam::Vector>&, double>(), py::arg("js"), py::arg("Gs"), py::arg("gs"), py::arg("f"));
 
     py::class_<MyFactor<gtsam::Pose2, gtsam::Matrix>, std::shared_ptr<MyFactor<gtsam::Pose2, gtsam::Matrix>>>(m_, "MyFactorPosePoint2")
         .def(py::init<size_t, size_t, double, const std::shared_ptr<gtsam::noiseModel::Base>>(), py::arg("key1"), py::arg("key2"), py::arg("measured"), py::arg("noiseModel"))

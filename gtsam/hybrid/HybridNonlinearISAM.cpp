@@ -15,7 +15,9 @@
  * @author Varun Agrawal
  */
 
+#include <gtsam/discrete/TableDistribution.h>
 #include <gtsam/hybrid/HybridGaussianFactorGraph.h>
+#include <gtsam/hybrid/HybridNonlinearFactor.h>
 #include <gtsam/hybrid/HybridNonlinearISAM.h>
 #include <gtsam/inference/Ordering.h>
 
@@ -34,13 +36,12 @@ void HybridNonlinearISAM::saveGraph(const string& s,
 /* ************************************************************************* */
 void HybridNonlinearISAM::update(const HybridNonlinearFactorGraph& newFactors,
                                  const Values& initialValues,
-                                 const boost::optional<size_t>& maxNrLeaves,
-                                 const boost::optional<Ordering>& ordering) {
+                                 const std::optional<size_t>& maxNrLeaves,
+                                 const std::optional<Ordering>& ordering) {
   if (newFactors.size() > 0) {
     // Reorder and relinearize every reorderInterval updates
     if (reorderInterval_ > 0 && ++reorderCounter_ >= reorderInterval_) {
-      // TODO(Varun) Relinearization doesn't take into account pruning
-      reorder_relinearize();
+      reorderRelinearize();
       reorderCounter_ = 0;
     }
 
@@ -50,7 +51,7 @@ void HybridNonlinearISAM::update(const HybridNonlinearFactorGraph& newFactors,
     // TODO: optimize for whole config?
     linPoint_.insert(initialValues);
 
-    boost::shared_ptr<HybridGaussianFactorGraph> linearizedNewFactors =
+    std::shared_ptr<HybridGaussianFactorGraph> linearizedNewFactors =
         newFactors.linearize(linPoint_);
 
     // Update ISAM
@@ -60,17 +61,37 @@ void HybridNonlinearISAM::update(const HybridNonlinearFactorGraph& newFactors,
 }
 
 /* ************************************************************************* */
-void HybridNonlinearISAM::reorder_relinearize() {
+void HybridNonlinearISAM::reorderRelinearize() {
   if (factors_.size() > 0) {
     // Obtain the new linearization point
     const Values newLinPoint = estimate();
 
+    DiscreteConditional::shared_ptr discreteProbabilities;
+
+    auto discreteRoot = isam_.roots().at(0)->conditional();
+    if (discreteRoot->asDiscrete<TableDistribution>()) {
+      discreteProbabilities = discreteRoot->asDiscrete<TableDistribution>();
+    } else {
+      discreteProbabilities = discreteRoot->asDiscrete();
+    }
+
     isam_.clear();
+
+    // Prune nonlinear factors based on discrete conditional probabilities
+    HybridNonlinearFactorGraph pruned_factors;
+    for (auto&& factor : factors_) {
+      if (auto nf = std::dynamic_pointer_cast<HybridNonlinearFactor>(factor)) {
+        pruned_factors.push_back(nf->prune(*discreteProbabilities));
+      } else {
+        pruned_factors.push_back(factor);
+      }
+    }
+    factors_ = pruned_factors;
 
     // Just recreate the whole BayesTree
     // TODO: allow for constrained ordering here
-    // TODO: decouple relinearization and reordering to avoid
-    isam_.update(*factors_.linearize(newLinPoint), boost::none, boost::none,
+    // TODO: decouple re-linearization and reordering to avoid
+    isam_.update(*factors_.linearize(newLinPoint), {}, {},
                  eliminationFunction_);
 
     // Update linearization point

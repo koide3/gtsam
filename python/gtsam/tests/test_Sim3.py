@@ -13,17 +13,17 @@ import unittest
 from typing import List, Optional
 
 import numpy as np
+from gtsam.utils.test_case import GtsamTestCase
 
 import gtsam
-from gtsam import Point3, Pose3, Pose3Pairs, Rot3, Similarity3
-from gtsam.utils.test_case import GtsamTestCase
+from gtsam import Point3, Pose3, Rot3, Similarity3, BetweenFactorSimilarity3, NonlinearFactorGraph, Values, LevenbergMarquardtOptimizer, LevenbergMarquardtParams
 
 
 class TestSim3(GtsamTestCase):
     """Test selected Sim3 methods."""
 
     def test_align_poses_along_straight_line(self):
-        """Test Align Pose3Pairs method.
+        """Test Pose3 Align method.
 
         Scenario:
            3 object poses
@@ -49,7 +49,7 @@ class TestSim3(GtsamTestCase):
 
         wToi_list = [wTo0, wTo1, wTo2]
 
-        we_pairs = Pose3Pairs(list(zip(wToi_list, eToi_list)))
+        we_pairs = list(zip(wToi_list, eToi_list))
 
         # Recover the transformation wSe (i.e. world_S_egovehicle)
         wSe = Similarity3.Align(we_pairs)
@@ -58,7 +58,7 @@ class TestSim3(GtsamTestCase):
             self.gtsamAssertEquals(wToi, wSe.transformFrom(eToi))
 
     def test_align_poses_along_straight_line_gauge(self):
-        """Test if Align Pose3Pairs method can account for gauge ambiguity.
+        """Test if Pose3 Align method can account for gauge ambiguity.
 
         Scenario:
            3 object poses
@@ -84,7 +84,7 @@ class TestSim3(GtsamTestCase):
 
         wToi_list = [wTo0, wTo1, wTo2]
 
-        we_pairs = Pose3Pairs(list(zip(wToi_list, eToi_list)))
+        we_pairs = list(zip(wToi_list, eToi_list))
 
         # Recover the transformation wSe (i.e. world_S_egovehicle)
         wSe = Similarity3.Align(we_pairs)
@@ -93,7 +93,7 @@ class TestSim3(GtsamTestCase):
             self.gtsamAssertEquals(wToi, wSe.transformFrom(eToi))
 
     def test_align_poses_scaled_squares(self):
-        """Test if Align Pose3Pairs method can account for gauge ambiguity.
+        """Test if Pose3 Align method can account for gauge ambiguity.
 
         Make sure a big and small square can be aligned.
         The u's represent a big square (10x10), and v's represents a small square (4x4).
@@ -122,13 +122,72 @@ class TestSim3(GtsamTestCase):
 
         bTi_list = [bTi0, bTi1, bTi2, bTi3]
 
-        ab_pairs = Pose3Pairs(list(zip(aTi_list, bTi_list)))
+        ab_pairs = list(zip(aTi_list, bTi_list))
 
         # Recover the transformation wSe (i.e. world_S_egovehicle)
         aSb = Similarity3.Align(ab_pairs)
 
         for aTi, bTi in zip(aTi_list, bTi_list):
             self.gtsamAssertEquals(aTi, aSb.transformFrom(bTi))
+
+    def test_sim3_optimization(self)->None:
+        # Create a PriorFactor with a Sim3 prior
+        prior = Similarity3(Rot3.Ypr(0.1, 0.2, 0.3), Point3(1, 2, 3), 4)
+        model = gtsam.noiseModel.Isotropic.Sigma(7, 1)
+
+        # Create graph
+        graph = NonlinearFactorGraph()
+        graph.addPriorSimilarity3(1, prior, model)
+
+        # Create initial estimate with Identity transform
+        initial = Values()
+        initial.insert(1, Similarity3())
+
+        # Optimize
+        params = LevenbergMarquardtParams()
+        params.setVerbosityLM("TRYCONFIG")
+        result = LevenbergMarquardtOptimizer(graph, initial).optimize()
+
+        # After optimization, result should be prior
+        self.gtsamAssertEquals(prior, result.atSimilarity3(1), 1e-4)
+
+    def test_sim3_optimization2(self) -> None:
+        prior = Similarity3()
+        m1 = Similarity3(Rot3.Ypr(np.pi / 4.0, 0, 0), Point3(2.0, 0, 0), 1.0)
+        m2 = Similarity3(Rot3.Ypr(np.pi / 2.0, 0, 0), Point3(np.sqrt(8) * 0.9, 0, 0), 1.0)
+        m3 = Similarity3(Rot3.Ypr(3 * np.pi / 4.0, 0, 0), Point3(np.sqrt(32) * 0.8, 0, 0), 1.0)
+        m4 = Similarity3(Rot3.Ypr(np.pi / 2.0, 0, 0), Point3(6 * 0.7, 0, 0), 1.0)
+        loop = Similarity3(1.42)
+
+        priorNoise = gtsam.noiseModel.Isotropic.Sigma(7, 0.01)
+        betweenNoise = gtsam.noiseModel.Diagonal.Sigmas(np.array([0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 10]))
+        betweenNoise2 = gtsam.noiseModel.Diagonal.Sigmas(np.array([ 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0]))
+        b1 = BetweenFactorSimilarity3(1, 2, m1, betweenNoise)
+        b2 = BetweenFactorSimilarity3(2, 3, m2, betweenNoise)
+        b3 = BetweenFactorSimilarity3(3, 4, m3, betweenNoise)
+        b4 = BetweenFactorSimilarity3(4, 5, m4, betweenNoise)
+        lc = BetweenFactorSimilarity3(5, 1, loop, betweenNoise2)
+
+        # Create graph
+        graph = NonlinearFactorGraph()
+        graph.addPriorSimilarity3(1, prior, priorNoise)
+        graph.add(b1)
+        graph.add(b2)
+        graph.add(b3)
+        graph.add(b4)
+        graph.add(lc)
+
+        # graph.print("Full Graph\n");
+        initial=Values()
+        initial.insert(1, prior)
+        initial.insert(2, Similarity3(Rot3.Ypr(np.pi / 2.0, 0, 0), Point3(1, 0, 0), 1.1))
+        initial.insert(3, Similarity3(Rot3.Ypr(2.0 * np.pi / 2.0, 0, 0), Point3(0.9, 1.1, 0), 1.2))
+        initial.insert(4, Similarity3(Rot3.Ypr(3.0 * np.pi / 2.0, 0, 0), Point3(0, 1, 0), 1.3))
+        initial.insert(5, Similarity3(Rot3.Ypr(4.0 * np.pi / 2.0, 0, 0), Point3(0, 0, 0), 1.0))
+
+
+        result = LevenbergMarquardtOptimizer(graph, initial).optimizeSafely()
+        self.gtsamAssertEquals(Similarity3(0.7), result.atSimilarity3(5), 0.4)
 
     def test_align_via_Sim3_to_poses_skydio32(self) -> None:
         """Ensure scale estimate of Sim(3) object is non-negative.
@@ -689,7 +748,7 @@ def align_poses_sim3(aTi_list: List[Pose3], bTi_list: List[Pose3]) -> Similarity
     assert len(aTi_list) == len(bTi_list)
     assert n_to_align >= 2, "SIM(3) alignment uses at least 2 frames"
 
-    ab_pairs = Pose3Pairs(list(zip(aTi_list, bTi_list)))
+    ab_pairs = list(zip(aTi_list, bTi_list))
 
     aSb = Similarity3.Align(ab_pairs)
 

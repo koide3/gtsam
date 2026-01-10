@@ -29,8 +29,12 @@ class PoseToPointFactor : public NoiseModelFactorN<POSE, POINT> {
   POINT measured_; /** the point measurement in local coordinates */
 
  public:
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   // shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<PoseToPointFactor> shared_ptr;
+  typedef std::shared_ptr<PoseToPointFactor> shared_ptr;
 
   /** default constructor - only use for serialization */
   PoseToPointFactor() {}
@@ -64,7 +68,7 @@ class PoseToPointFactor : public NoiseModelFactorN<POSE, POINT> {
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this)));
   }
 
@@ -79,8 +83,8 @@ class PoseToPointFactor : public NoiseModelFactorN<POSE, POINT> {
    */
   Vector evaluateError(
       const POSE& w_T_b, const POINT& w_P,
-      boost::optional<Matrix&> H1 = boost::none,
-      boost::optional<Matrix&> H2 = boost::none) const override {
+      OptionalMatrixType H1,
+      OptionalMatrixType H2) const override {
     return w_T_b.transformTo(w_P, H1, H2) - measured_;
   }
 
@@ -88,6 +92,7 @@ class PoseToPointFactor : public NoiseModelFactorN<POSE, POINT> {
   const POINT& measured() const { return measured_; }
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template <class ARCHIVE>
@@ -98,6 +103,7 @@ class PoseToPointFactor : public NoiseModelFactorN<POSE, POINT> {
         boost::serialization::base_object<Base>(*this));
     ar& BOOST_SERIALIZATION_NVP(measured_);
   }
+#endif
 
 };  // \class PoseToPointFactor
 

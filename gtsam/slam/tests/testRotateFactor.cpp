@@ -14,6 +14,9 @@
 
 #include <vector>
 
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 using namespace std;
 using namespace std::placeholders;
 using namespace gtsam;
@@ -69,14 +72,14 @@ TEST (RotateFactor, test) {
   Matrix actual, expected;
   // Use numerical derivatives to calculate the expected Jacobian
   {
-    expected = numericalDerivative11<Vector3,Rot3>(
-        std::bind(&RotateFactor::evaluateError, &f, std::placeholders::_1, boost::none), iRc);
+    expected = numericalDerivative11<Vector3, Rot3>(
+			[&f](const Rot3& r) { return f.evaluateError(r); }, iRc);
     f.evaluateError(iRc, actual);
     EXPECT(assert_equal(expected, actual, 1e-9));
   }
   {
-    expected = numericalDerivative11<Vector3,Rot3>(
-        std::bind(&RotateFactor::evaluateError, &f, std::placeholders::_1, boost::none), R);
+    expected = numericalDerivative11<Vector3, Rot3>(
+			[&f](const Rot3& r) { return f.evaluateError(r); }, R);
     f.evaluateError(R, actual);
     EXPECT(assert_equal(expected, actual, 1e-9));
   }
@@ -141,15 +144,13 @@ TEST (RotateDirectionsFactor, test) {
   // Use numerical derivatives to calculate the expected Jacobian
   {
     expected = numericalDerivative11<Vector,Rot3>(
-        std::bind(&RotateDirectionsFactor::evaluateError, &f, std::placeholders::_1,
-            boost::none), iRc);
+			[&f](const Rot3& r) {return f.evaluateError(r);}, iRc);
     f.evaluateError(iRc, actual);
     EXPECT(assert_equal(expected, actual, 1e-9));
   }
   {
     expected = numericalDerivative11<Vector,Rot3>(
-        std::bind(&RotateDirectionsFactor::evaluateError, &f, std::placeholders::_1,
-            boost::none), R);
+			[&f](const Rot3& r) {return f.evaluateError(r);}, R);
     f.evaluateError(R, actual);
     EXPECT(assert_equal(expected, actual, 1e-9));
   }

@@ -17,14 +17,13 @@
 
 #include "TangentPreintegration.h"
 #include <gtsam/base/numericalDerivative.h>
-#include <boost/make_shared.hpp>
 
 using namespace std;
 
 namespace gtsam {
 
 //------------------------------------------------------------------------------
-TangentPreintegration::TangentPreintegration(const boost::shared_ptr<Params>& p,
+TangentPreintegration::TangentPreintegration(const std::shared_ptr<Params>& p,
     const Bias& biasHat) :
     PreintegrationBase(p, biasHat) {
   resetIntegration();
@@ -67,7 +66,7 @@ Vector9 TangentPreintegration::UpdatePreintegrated(const Vector3& a_body,
   // Calculate exact mean propagation
   Matrix3 w_tangent_H_theta, invH;
   const Vector3 w_tangent = // angular velocity mapped back to tangent space
-      local.applyInvDexp(w_body, A ? &w_tangent_H_theta : 0, C ? &invH : 0);
+      local.applyRightJacobianInverse(w_body, A ? &w_tangent_H_theta : 0, C ? &invH : 0);
   const Rot3 R(local.expmap());  // nRb: rotation of body in nav frame
   const Vector3 a_nav = R * a_body;
   const double dt22 = 0.5 * dt * dt;
@@ -80,7 +79,7 @@ Vector9 TangentPreintegration::UpdatePreintegrated(const Vector3& a_body,
 
   if (A) {
     // Exact derivative of R*a with respect to theta:
-    const Matrix3 a_nav_H_theta = R.matrix() * skewSymmetric(-a_body) * local.dexp();
+    const Matrix3 a_nav_H_theta = R.matrix() * skewSymmetric(-a_body) * local.rightJacobian();
 
     A->setIdentity();
     A->block<3, 3>(0, 0).noalias() += w_tangent_H_theta * dt;  // theta
@@ -112,9 +111,11 @@ void TangentPreintegration::update(const Vector3& measuredAcc,
 
   // Possibly correct for sensor pose by converting to body frame
   Matrix3 D_correctedAcc_acc, D_correctedAcc_omega, D_correctedOmega_omega;
-  if (p().body_P_sensor)
-    boost::tie(acc, omega) = correctMeasurementsBySensorPose(acc, omega,
-        D_correctedAcc_acc, D_correctedAcc_omega, D_correctedOmega_omega);
+  if (p().body_P_sensor) {
+    std::tie(acc, omega) = correctMeasurementsBySensorPose(
+        acc, omega, D_correctedAcc_acc, D_correctedAcc_omega,
+        D_correctedOmega_omega);
+  }
 
   // Do update
   deltaTij_ += dt;

@@ -30,15 +30,18 @@ class ConstantVelocityFactor : public NoiseModelFactorN<NavState, NavState> {
     double dt_;
 
    public:
-    using Base = NoiseModelFactorN<NavState, NavState>;
+    using Base = NoiseModelFactor2<NavState, NavState>;
+
+    // Provide access to the Matrix& version of evaluateError:
+    using Base::evaluateError;
 
    public:
     ConstantVelocityFactor(Key i, Key j, double dt, const SharedNoiseModel &model)
         : NoiseModelFactorN<NavState, NavState>(model, i, j), dt_(dt) {}
-    ~ConstantVelocityFactor() override{};
+    ~ConstantVelocityFactor() override {}
 
     /**
-     * @brief Caclulate error: (x2 - x1.update(dt)))
+     * @brief Calculate error: (x2 - x1.update(dt)))
      * where X1 and X1 are NavStates and dt is
      * the time difference in seconds between the states.
      * @param x1 NavState for key a
@@ -48,8 +51,7 @@ class ConstantVelocityFactor : public NoiseModelFactorN<NavState, NavState> {
      * @return * Vector
      */
     gtsam::Vector evaluateError(const NavState &x1, const NavState &x2,
-                                boost::optional<gtsam::Matrix &> H1 = boost::none,
-                                boost::optional<gtsam::Matrix &> H2 = boost::none) const override {
+                                OptionalMatrixType H1, OptionalMatrixType H2) const override {
         // only used to use update() below
         static const Vector3 b_accel{0.0, 0.0, 0.0};
         static const Vector3 b_omega{0.0, 0.0, 0.0};

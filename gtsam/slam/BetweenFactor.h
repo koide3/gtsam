@@ -40,8 +40,8 @@ namespace gtsam {
   class BetweenFactor: public NoiseModelFactorN<VALUE, VALUE> {
 
     // Check that VALUE type is a testable Lie group
-    BOOST_CONCEPT_ASSERT((IsTestable<VALUE>));
-    BOOST_CONCEPT_ASSERT((IsLieGroup<VALUE>));
+    GTSAM_CONCEPT_ASSERT(IsTestable<VALUE>);
+    GTSAM_CONCEPT_ASSERT(IsLieGroup<VALUE>);
 
   public:
 
@@ -56,8 +56,11 @@ namespace gtsam {
 
   public:
 
+    // Provide access to the Matrix& version of evaluateError:
+    using Base::evaluateError;
+
     // shorthand for a smart pointer to a factor
-    typedef typename boost::shared_ptr<BetweenFactor> shared_ptr;
+    typedef typename std::shared_ptr<BetweenFactor> shared_ptr;
 
     /// @name Standard Constructors
     /// @{
@@ -77,7 +80,7 @@ namespace gtsam {
 
     /// @return a deep copy of this factor
     gtsam::NonlinearFactor::shared_ptr clone() const override {
-      return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+      return std::static_pointer_cast<gtsam::NonlinearFactor>(
           gtsam::NonlinearFactor::shared_ptr(new This(*this))); }
 
     /// @name Testable
@@ -105,13 +108,13 @@ namespace gtsam {
     /// @{
 
     /// evaluate error, returns vector of errors size of tangent space
-    Vector evaluateError(const T& p1, const T& p2, boost::optional<Matrix&> H1 =
-      boost::none, boost::optional<Matrix&> H2 = boost::none) const override {
+    Vector evaluateError(const T& p1, const T& p2,
+			OptionalMatrixType H1, OptionalMatrixType H2) const override {
       T hx = traits<T>::Between(p1, p2, H1, H2); // h(x)
       // manifold equivalent of h(x)-z -> log(z,h(x))
 #ifdef GTSAM_SLOW_BUT_CORRECT_BETWEENFACTOR
       typename traits<T>::ChartJacobian::Jacobian Hlocal;
-      Vector rval = traits<T>::Local(measured_, hx, boost::none, (H1 || H2) ? &Hlocal : 0);
+      Vector rval = traits<T>::Local(measured_, hx, OptionalNone, (H1 || H2) ? &Hlocal : 0);
       if (H1) *H1 = Hlocal * (*H1);
       if (H2) *H2 = Hlocal * (*H2);
       return rval;
@@ -132,6 +135,7 @@ namespace gtsam {
 
   private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
@@ -141,11 +145,12 @@ namespace gtsam {
           boost::serialization::base_object<Base>(*this));
       ar & BOOST_SERIALIZATION_NVP(measured_);
     }
+#endif
 
-	  // Alignment, see https://eigen.tuxfamily.org/dox/group__TopicStructHavingEigenMembers.html
-	  enum { NeedsToAlign = (sizeof(VALUE) % 16) == 0 };
-    public:
-      GTSAM_MAKE_ALIGNED_OPERATOR_NEW_IF(NeedsToAlign)
+    // Alignment, see https://eigen.tuxfamily.org/dox/group__TopicStructHavingEigenMembers.html
+    inline constexpr static auto NeedsToAlign = (sizeof(VALUE) % 16) == 0;
+  public:
+    GTSAM_MAKE_ALIGNED_OPERATOR_NEW_IF(NeedsToAlign)
   }; // \class BetweenFactor
 
   /// traits
@@ -160,7 +165,7 @@ namespace gtsam {
   template<class VALUE>
   class BetweenConstraint : public BetweenFactor<VALUE> {
   public:
-    typedef boost::shared_ptr<BetweenConstraint<VALUE> > shared_ptr;
+    typedef std::shared_ptr<BetweenConstraint<VALUE> > shared_ptr;
 
     /** Syntactic sugar for constrained version */
     BetweenConstraint(const VALUE& measured, Key key1, Key key2, double mu = 1000.0) :
@@ -171,12 +176,14 @@ namespace gtsam {
   private:
 
     /** Serialization function */
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     friend class boost::serialization::access;
     template<class ARCHIVE>
     void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
       ar & boost::serialization::make_nvp("BetweenFactor",
           boost::serialization::base_object<BetweenFactor<VALUE> >(*this));
     }
+#endif
   }; // \class BetweenConstraint
 
   /// traits

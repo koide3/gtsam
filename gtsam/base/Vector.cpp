@@ -18,13 +18,13 @@
  */
 
 #include <gtsam/base/Vector.h>
-#include <boost/optional.hpp>
 #include <stdexcept>
 #include <cstdarg>
 #include <limits>
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <cassert>
 #include <iomanip>
 #include <cmath>
 #include <cstdio>

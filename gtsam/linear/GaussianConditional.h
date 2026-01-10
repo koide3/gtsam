@@ -19,8 +19,6 @@
 
 #pragma once
 
-#include <boost/utility.hpp>
-
 #include <gtsam/global_includes.h>
 #include <gtsam/linear/JacobianFactor.h>
 #include <gtsam/inference/Conditional.h>
@@ -33,8 +31,10 @@ namespace gtsam {
 
   /**
   * A GaussianConditional functions as the node in a Bayes network.
-  * It has a set of parents y,z, etc. and implements a probability density on x.
+  * It has a set of parents y,z, etc. and implements a Gaussian probability density p(x | y, z) on x.
   * The negative log-density is given by \f$ \frac{1}{2} |Rx - (d - Sy - Tz - ...)|^2 \f$
+  * The mean of the conditional density is \f$ R^{-1}(d - Sy - Tz - ...) \f$.
+  * The covariance of the conditional density is given by the noise model and is constrained to be diagonal.
   * @ingroup linear
   */
   class GTSAM_EXPORT GaussianConditional :
@@ -43,7 +43,7 @@ namespace gtsam {
   {
   public:
     typedef GaussianConditional This; ///< Typedef to this class
-    typedef boost::shared_ptr<This> shared_ptr; ///< shared_ptr to this class
+    typedef std::shared_ptr<This> shared_ptr; ///< shared_ptr to this class
     typedef JacobianFactor BaseFactor; ///< Typedef to our factor base class
     typedef Conditional<BaseFactor, This> BaseConditional; ///< Typedef to our conditional base class
 
@@ -75,14 +75,35 @@ namespace gtsam {
       size_t nrFrontals, const Vector& d,
       const SharedDiagonal& sigmas = SharedDiagonal());
 
-    /** Constructor with arbitrary number keys, and where the augmented matrix is given all together
-     *  instead of in block terms.  Note that only the active view of the provided augmented matrix
-     *  is used, and that the matrix data is copied into a newly-allocated matrix in the constructed
-     *  factor. */
-    template<typename KEYS>
-    GaussianConditional(
-      const KEYS& keys, size_t nrFrontals, const VerticalBlockMatrix& augmentedMatrix,
-      const SharedDiagonal& sigmas = SharedDiagonal());
+    /**
+     * @brief Constructor with an arbitrary number of keys, where the augmented matrix
+     * is given all together instead of in block terms.
+     *
+     * @tparam KEYS Type of the keys container.
+     * @param keys Container of keys.
+     * @param nrFrontals Number of frontal variables.
+     * @param augmentedMatrix The augmented matrix containing the coefficients.
+     * @param sigmas Optional noise model (default is an empty SharedDiagonal).
+     */
+    template <typename KEYS>
+    GaussianConditional(const KEYS& keys, size_t nrFrontals,
+                        const VerticalBlockMatrix& augmentedMatrix,
+                        const SharedDiagonal& sigmas = SharedDiagonal());
+
+    /**
+     * @brief Constructor with an arbitrary number of keys, where the augmented matrix
+     * is given all together instead of in block terms, using move semantics for efficiency.
+     *
+     * @tparam KEYS Type of the keys container.
+     * @param keys Container of keys.
+     * @param nrFrontals Number of frontal variables.
+     * @param augmentedMatrix The augmented matrix containing the coefficients (moved).
+     * @param sigmas Optional noise model (default is an empty SharedDiagonal).
+     */
+    template <typename KEYS>
+    GaussianConditional(const KEYS& keys, size_t nrFrontals,
+                        VerticalBlockMatrix&& augmentedMatrix,
+                        const SharedDiagonal& sigmas = SharedDiagonal());
 
     /// Construct from mean `mu` and standard deviation `sigma`.
     static GaussianConditional FromMeanAndStddev(Key key, const Vector& mu,
@@ -103,7 +124,7 @@ namespace gtsam {
     /// Create shared pointer by forwarding arguments to fromMeanAndStddev.
     template<typename... Args>
     static shared_ptr sharedMeanAndStddev(Args&&... args) {
-      return boost::make_shared<This>(FromMeanAndStddev(std::forward<Args>(args)...));
+      return std::make_shared<This>(FromMeanAndStddev(std::forward<Args>(args)...));
     }
 
     /** Combine several GaussianConditional into a single dense GC.  The conditionals enumerated by
@@ -133,10 +154,14 @@ namespace gtsam {
     /// @{
 
     /**
-     * normalization constant = 1.0 / sqrt((2*pi)^n*det(Sigma))
-     * log = - 0.5 * n*log(2*pi) - 0.5 * log det(Sigma)
+     * @brief Return the negative log of the normalization constant.
+     *
+     * normalization constant k = 1.0 / sqrt((2*pi)^n*det(Sigma))
+     * -log(k) = 0.5 * n*log(2*pi) + 0.5 * log det(Sigma)
+     *
+     * @return double 
      */
-    double logNormalizationConstant() const override;
+    double negLogConstant() const override;
 
     /**
      * Calculate log-probability log(evaluate(x)) for given values `x`:
@@ -190,25 +215,19 @@ namespace gtsam {
      * Sample from conditional, zero parent version
      * Example:
      *   std::mt19937_64 rng(42);
-     *   auto sample = gbn.sample(&rng);
+     *   auto sample = gc.sample(&rng);
      */
-    VectorValues sample(std::mt19937_64* rng) const;
+    VectorValues sample(std::mt19937_64* rng = nullptr) const;
 
     /**
      * Sample from conditional, given missing variables
      * Example:
      *   std::mt19937_64 rng(42);
      *   VectorValues given = ...;
-     *   auto sample = gbn.sample(given, &rng);
+     *   auto sample = gc.sample(given, &rng);
      */
     VectorValues sample(const VectorValues& parentsValues,
-                        std::mt19937_64* rng) const;
-
-    /// Sample, use default rng
-    VectorValues sample() const;
-
-    /// Sample with given values, use default rng
-    VectorValues sample(const VectorValues& parentsValues) const;
+                        std::mt19937_64* rng = nullptr) const;
 
     /// @}
     /// @name Linear algebra.
@@ -273,17 +292,8 @@ namespace gtsam {
 
     /// @}
 
-
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-    /// @name Deprecated
-    /// @{
-    /** Scale the values in \c gy according to the sigmas for the frontal variables in this
-     *  conditional. */
-    void GTSAM_DEPRECATED scaleFrontalsBySigma(VectorValues& gy) const;
-    /// @}
-#endif
-
    private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class Archive>
@@ -291,6 +301,7 @@ namespace gtsam {
       ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(BaseFactor);
       ar & BOOST_SERIALIZATION_BASE_OBJECT_NVP(BaseConditional);
     }
+#endif
   }; // GaussianConditional
 
 /// traits

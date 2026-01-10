@@ -56,10 +56,8 @@ void Cal3Bundler::print(const std::string& s) const {
 
 /* ************************************************************************* */
 bool Cal3Bundler::equals(const Cal3Bundler& K, double tol) const {
-  const Cal3* base = dynamic_cast<const Cal3*>(&K);
-  return (Cal3::equals(*base, tol) && std::fabs(k1_ - K.k1_) < tol &&
-          std::fabs(k2_ - K.k2_) < tol && std::fabs(u0_ - K.u0_) < tol &&
-          std::fabs(v0_ - K.v0_) < tol);
+  return Cal3f::equals(static_cast<const Cal3f&>(K), tol) &&
+         std::fabs(k1_ - K.k1_) < tol && std::fabs(k2_ - K.k2_) < tol;
 }
 
 /* ************************************************************************* */
@@ -113,7 +111,8 @@ Point2 Cal3Bundler::calibrate(const Point2& pi, OptionalJacobian<2, 3> Dcal,
 
     // Set px and py using intrinsic coordinates since that is where radial
     // distortion correction is done.
-    px = pn.x(), py = pn.y();
+    px = pn.x();
+    py = pn.y();
     iteration++;
 
   } while (iteration < maxIterations);
@@ -131,14 +130,14 @@ Point2 Cal3Bundler::calibrate(const Point2& pi, OptionalJacobian<2, 3> Dcal,
 /* ************************************************************************* */
 Matrix2 Cal3Bundler::D2d_intrinsic(const Point2& p) const {
   Matrix2 Dp;
-  uncalibrate(p, boost::none, Dp);
+  uncalibrate(p, {}, Dp);
   return Dp;
 }
 
 /* ************************************************************************* */
 Matrix23 Cal3Bundler::D2d_calibration(const Point2& p) const {
   Matrix23 Dcal;
-  uncalibrate(p, Dcal, boost::none);
+  uncalibrate(p, Dcal, {});
   return Dcal;
 }
 

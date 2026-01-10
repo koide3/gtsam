@@ -19,6 +19,10 @@
 
 #pragma once
 
+#include <gtsam/config.h>
+
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
+
 #include <Eigen/Core>
 #include <fstream>
 #include <sstream>
@@ -270,3 +274,4 @@ void deserializeBinary(const std::string& serialized, T& output,
 ///@}
 
 }  // namespace gtsam
+#endif

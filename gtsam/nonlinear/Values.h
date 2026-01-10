@@ -24,17 +24,17 @@
 
 #pragma once
 
+#include <gtsam/inference/Key.h>
 #include <gtsam/base/FastDefaultAllocator.h>
 #include <gtsam/base/GenericValue.h>
 #include <gtsam/base/VectorSpace.h>
-#include <gtsam/inference/Key.h>
-#include <boost/ptr_container/serialize_ptr_map.hpp>
-#include <boost/shared_ptr.hpp>
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-#include <boost/iterator/transform_iterator.hpp>
-#include <boost/iterator/filter_iterator.hpp>
+
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
+#include <boost/serialization/unique_ptr.hpp>
 #endif
 
+
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -71,12 +71,9 @@ namespace gtsam {
     // user defines the allocation details (i.e. optimize for memory pool/arenas
     // concurrency).
     typedef internal::FastDefaultAllocator<typename std::pair<const Key, void*>>::type KeyValuePtrPairAllocator;
-    typedef boost::ptr_map<
-        Key,
-        Value,
-        std::less<Key>,
-        ValueCloneAllocator,
-        KeyValuePtrPairAllocator > KeyValueMap;
+    using KeyValueMap =
+        std::map<Key, std::unique_ptr<Value>, std::less<Key>,
+                 std::allocator<std::pair<const Key, std::unique_ptr<Value>>>>;
 
     // The member to store the values, see just above
     KeyValueMap values_;
@@ -84,10 +81,10 @@ namespace gtsam {
   public:
 
     /// A shared_ptr to this class
-    typedef boost::shared_ptr<Values> shared_ptr;
+    typedef std::shared_ptr<Values> shared_ptr;
 
     /// A const shared_ptr to this class
-    typedef boost::shared_ptr<const Values> const_shared_ptr;
+    typedef std::shared_ptr<const Values> const_shared_ptr;
 
     /// A key-value pair, which you get by dereferencing iterators
     struct GTSAM_EXPORT KeyValuePair {
@@ -170,12 +167,12 @@ namespace gtsam {
      * exists. */
     bool exists(Key j) const;
 
-    /** Check if a value with key \c j exists, returns the value with type
-     * \c Value if the key does exist, or boost::none if it does not exist.
+    /** Check if a value with key \c j exists, returns a pointer to the const version of the value
+     * \c Value if the key does exist, or nullptr if it does not exist.
      * Throws DynamicValuesIncorrectType if the value type associated with the
      * requested key does not match the stored value type. */
     template<typename ValueType>
-    boost::optional<const ValueType&> exists(Key j) const;
+    const ValueType * exists(Key j) const;
 
     /** The number of variables in this config */
     size_t size() const { return values_.size(); }
@@ -192,8 +189,8 @@ namespace gtsam {
       const_iterator_type it_;
       deref_iterator(const_iterator_type it) : it_(it) {}
       ConstKeyValuePair operator*() const { return {it_->first, *(it_->second)}; }
-      boost::shared_ptr<ConstKeyValuePair> operator->() {
-        return boost::make_shared<ConstKeyValuePair>(it_->first, *(it_->second));
+      std::unique_ptr<ConstKeyValuePair> operator->() const {
+        return std::make_unique<ConstKeyValuePair>(it_->first, *(it_->second));
       }
       bool operator==(const deref_iterator& other) const {
         return it_ == other.it_;
@@ -248,6 +245,31 @@ namespace gtsam {
     template <typename ValueType>
     void insert(Key j, const ValueType& val);
 
+    /** Partial specialization that allows passing a unary Eigen expression for val.
+      *
+      * A unary expression is an expression such as 2*a or -a, where a is a valid Vector or Matrix type.
+      * The typical usage is for types Point2 (i.e. Eigen::Vector2d) or Point3 (i.e. Eigen::Vector3d).
+      * For example, together with the partial specialization for binary operators, a user may call insert(j, 2*a + M*b - c),
+      * where M is an appropriately sized matrix (such as a rotation matrix).
+      * Thus, it isn't necessary to explicitly evaluate the Eigen expression, as in insert(j, (2*a + M*b - c).eval()),
+      * nor is it necessary to first assign the expression to a separate variable.
+      */
+    template <typename UnaryOp, typename ValueType>
+    void insert(Key j, const Eigen::CwiseUnaryOp<UnaryOp, const ValueType>& val);
+
+    /** Partial specialization that allows passing a binary Eigen expression for val.
+      *
+      * A binary expression is an expression such as a + b, where a and b are valid Vector or Matrix
+      * types of compatible size.
+      * The typical usage is for types Point2 (i.e. Eigen::Vector2d) or Point3 (i.e. Eigen::Vector3d).
+      * For example, together with the partial specialization for binary operators, a user may call insert(j, 2*a + M*b - c),
+      * where M is an appropriately sized matrix (such as a rotation matrix).
+      * Thus, it isn't necessary to explicitly evaluate the Eigen expression, as in insert(j, (2*a + M*b - c).eval()),
+      * nor is it necessary to first assign the expression to a separate variable.
+      */
+    template <typename BinaryOp, typename ValueType1, typename ValueType2>
+    void insert(Key j, const Eigen::CwiseBinaryOp<BinaryOp, const ValueType1, const ValueType2>& val);
+
     /// version for double
     void insertDouble(Key j, double c) { insert<double>(j,c); }
 
@@ -261,6 +283,18 @@ namespace gtsam {
     template <typename T>
     void update(Key j, const T& val);
 
+    /** Partial specialization that allows passing a unary Eigen expression for val,
+      * similar to the partial specialization for insert.
+      */
+    template <typename UnaryOp, typename ValueType>
+    void update(Key j, const Eigen::CwiseUnaryOp<UnaryOp, const ValueType>& val);
+
+    /** Partial specialization that allows passing a binary Eigen expression for val,
+      * similar to the partial specialization for insert.
+      */
+    template <typename BinaryOp, typename ValueType1, typename ValueType2>
+    void update(Key j, const Eigen::CwiseBinaryOp<BinaryOp, const ValueType1, const ValueType2>& val);
+
     /** update the current available values without adding new ones */
     void update(const Values& values);
 
@@ -269,13 +303,25 @@ namespace gtsam {
 
     /**
      * Update a set of variables.
-     * If any variable key doe not exist, then perform an insert.
+     * If any variable key does not exist, then perform an insert.
      */
     void insert_or_assign(const Values& values);
 
     /// Templated version to insert_or_assign a variable with the given j.
     template <typename ValueType>
     void insert_or_assign(Key j, const ValueType& val);
+
+    /** Partial specialization that allows passing a unary Eigen expression for val,
+      * similar to the partial specialization for insert.
+      */
+    template <typename UnaryOp, typename ValueType>
+    void insert_or_assign(Key j, const Eigen::CwiseUnaryOp<UnaryOp, const ValueType>& val);
+
+    /** Partial specialization that allows passing a binary Eigen expression for val,
+      * similar to the partial specialization for insert.
+      */
+    template <typename BinaryOp, typename ValueType1, typename ValueType2>
+    void insert_or_assign(Key j, const Eigen::CwiseBinaryOp<BinaryOp, const ValueType1, const ValueType2>& val);
 
     /** Remove a variable from the config, throws KeyDoesNotExist<J> if j is not present */
     void erase(Key j);
@@ -310,15 +356,8 @@ namespace gtsam {
     VectorValues zeroVectors() const;
 
     // Count values of given type \c ValueType
-    template<class ValueType>
-    size_t count() const {
-      size_t i = 0;
-      for (const auto key_value : values_) {
-        if (dynamic_cast<const GenericValue<ValueType>*>(key_value.second))
-          ++i;
-      }
-      return i;
-    }
+    template <class ValueType>
+    size_t count() const;
 
     /**
      * Extract a subset of values of the given type \c ValueType.
@@ -343,109 +382,25 @@ namespace gtsam {
     std::map<Key, ValueType> // , std::less<Key>, Eigen::aligned_allocator<ValueType>
     extract(const std::function<bool(Key)>& filterFcn = &_truePredicate<Key>) const;
 
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-    // Types obtained by iterating
-    typedef KeyValueMap::const_iterator::value_type ConstKeyValuePtrPair;
-    typedef KeyValueMap::iterator::value_type KeyValuePtrPair;
-
-    /// Mutable forward iterator, with value type KeyValuePair
-    typedef boost::transform_iterator<
-        std::function<KeyValuePair(const KeyValuePtrPair&)>, KeyValueMap::iterator> iterator;
-
-    /// Const forward iterator, with value type ConstKeyValuePair
-    typedef boost::transform_iterator<
-        std::function<ConstKeyValuePair(const ConstKeyValuePtrPair&)>, KeyValueMap::const_iterator> const_iterator;
-
-    /// Mutable reverse iterator, with value type KeyValuePair
-    typedef boost::transform_iterator<
-        std::function<KeyValuePair(const KeyValuePtrPair&)>, KeyValueMap::reverse_iterator> reverse_iterator;
-
-    /// Const reverse iterator, with value type ConstKeyValuePair
-    typedef boost::transform_iterator<
-        std::function<ConstKeyValuePair(const ConstKeyValuePtrPair&)>, KeyValueMap::const_reverse_iterator> const_reverse_iterator;
-
-    /** insert that mimics the STL map insert - if the value already exists, the map is not modified
-     *  and an iterator to the existing value is returned, along with 'false'.  If the value did not
-     *  exist, it is inserted and an iterator pointing to the new element, along with 'true', is
-     *  returned. */
-    std::pair<iterator, bool> tryInsert(Key j, const Value& value);
-
-    static ConstKeyValuePair make_const_deref_pair(const KeyValueMap::const_iterator::value_type& key_value) {
-      return ConstKeyValuePair(key_value.first, *key_value.second); }
-
-    static KeyValuePair make_deref_pair(const KeyValueMap::iterator::value_type& key_value) {
-      return KeyValuePair(key_value.first, *key_value.second); }
-
-    const_iterator _begin() const { return boost::make_transform_iterator(values_.begin(), &make_const_deref_pair); }
-    const_iterator _end() const { return boost::make_transform_iterator(values_.end(), &make_const_deref_pair); }
-    iterator begin() { return boost::make_transform_iterator(values_.begin(), &make_deref_pair); }
-    iterator end() { return boost::make_transform_iterator(values_.end(), &make_deref_pair); }
-    const_reverse_iterator rbegin() const { return boost::make_transform_iterator(values_.rbegin(), &make_const_deref_pair); }
-    const_reverse_iterator rend() const { return boost::make_transform_iterator(values_.rend(), &make_const_deref_pair); }
-    reverse_iterator rbegin() { return boost::make_transform_iterator(values_.rbegin(), &make_deref_pair); }
-    reverse_iterator rend() { return boost::make_transform_iterator(values_.rend(), &make_deref_pair); }
-
-    /** Find an element by key, returning an iterator, or end() if the key was
-     * not found. */
-    iterator find(Key j) { return boost::make_transform_iterator(values_.find(j), &make_deref_pair); }
-
-    /** Find the element greater than or equal to the specified key. */
-    iterator lower_bound(Key j) { return boost::make_transform_iterator(values_.lower_bound(j), &make_deref_pair); }
-
-    /** Find the lowest-ordered element greater than the specified key. */
-    iterator upper_bound(Key j) { return boost::make_transform_iterator(values_.upper_bound(j), &make_deref_pair); }
-
-    /** A filtered view of a Values, returned from Values::filter. */
-    template <class ValueType = Value>
-    class Filtered;
-
-    /** A filtered view of a const Values, returned from Values::filter. */
-    template <class ValueType = Value>
-    class ConstFiltered;
-
-    /** Constructor from a Filtered view copies out all values */
-    template <class ValueType>
-    Values(const Filtered<ValueType>& view);
-
-    /** Constructor from a Filtered or ConstFiltered view */
-    template <class ValueType>
-    Values(const ConstFiltered<ValueType>& view);
-
-    /// A filtered view of the original Values class.
-    Filtered<Value> GTSAM_DEPRECATED
-    filter(const std::function<bool(Key)>& filterFcn);
-
-    /// A filtered view of the original Values class, also filter on type.
-    template <class ValueType>
-    Filtered<ValueType> GTSAM_DEPRECATED
-    filter(const std::function<bool(Key)>& filterFcn = &_truePredicate<Key>);
-
-    /// A filtered view of the original Values class, const version.
-    ConstFiltered<Value> GTSAM_DEPRECATED
-    filter(const std::function<bool(Key)>& filterFcn) const;
-
-    /// A filtered view of the original Values class, also on type, const.
-    template <class ValueType>
-    ConstFiltered<ValueType> GTSAM_DEPRECATED filter(
-        const std::function<bool(Key)>& filterFcn = &_truePredicate<Key>) const;
-#endif
-
   private:
     // Filters based on ValueType (if not Value) and also based on the user-
     // supplied \c filter function.
     template<class ValueType>
     static bool filterHelper(const std::function<bool(Key)> filter, const ConstKeyValuePair& key_value) {
-      BOOST_STATIC_ASSERT((!boost::is_same<ValueType, Value>::value));
+      // static_assert if ValueType is type: Value
+      static_assert(!std::is_same<Value, ValueType>::value, "ValueType must not be type: Value to use this filter");
       // Filter and check the type
       return filter(key_value.key) && (dynamic_cast<const GenericValue<ValueType>*>(&key_value.value));
     }
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
     void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
       ar & BOOST_SERIALIZATION_NVP(values_);
     }
+#endif
 
   };
 

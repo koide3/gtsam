@@ -1,10 +1,10 @@
-# README - Georgia Tech Smoothing and Mapping Library
+# GTSAM: Georgia Tech Smoothing and Mapping Library
 
 **Important Note**
 
-As of Dec 2021, the `develop` branch is officially in "Pre 4.2" mode. A great new feature we will be adding in 4.2 is *hybrid inference* a la DCSLAM (Kevin Doherty et al) and we envision several API-breaking changes will happen in the discrete folder.
+**As of January 2023, the `develop` branch is officially in "Pre 4.3" mode. We envision several API-breaking changes as we switch to C++17 and away from boost.**
 
-In addition, features deprecated in 4.1 will be removed. Please use the last [4.1.1 release](https://github.com/borglab/gtsam/releases/tag/4.1.1) if you need those features. However, most (not all, unfortunately) are easily converted and can be tracked down (in 4.1.1) by disabling the cmake flag `GTSAM_ALLOW_DEPRECATED_SINCE_V42`.
+In addition, features deprecated in 4.2 will be removed. Please use the stable [4.2 release](https://github.com/borglab/gtsam/releases/tag/4.2) if you need those features. However, most are easily converted and can be tracked down (in 4.2) by disabling the cmake flag `GTSAM_ALLOW_DEPRECATED_SINCE_V42`.
 
 ## What is GTSAM?
 
@@ -15,11 +15,11 @@ matrices.
 
 The current support matrix is:
 
-| Platform     | Compiler  | Build Status  |
-|:------------:|:---------:|:-------------:|
-| Ubuntu 18.04 | gcc/clang | ![Linux CI](https://github.com/borglab/gtsam/workflows/Linux%20CI/badge.svg) |
-| macOS        | clang     | ![macOS CI](https://github.com/borglab/gtsam/workflows/macOS%20CI/badge.svg) |
-| Windows      | MSVC      | ![Windows CI](https://github.com/borglab/gtsam/workflows/Windows%20CI/badge.svg) |
+|      Platform      | Compiler  |                                   Build Status                                   |
+| :----------------: | :-------: | :------------------------------------------------------------------------------: |
+| Ubuntu 22.04/24.04 | gcc/clang |   ![Linux CI](https://github.com/borglab/gtsam/workflows/Linux%20CI/badge.svg)   |
+|       macOS        |   clang   |   ![macOS CI](https://github.com/borglab/gtsam/workflows/macOS%20CI/badge.svg)   |
+|      Windows       |   MSVC    | ![Windows CI](https://github.com/borglab/gtsam/workflows/Windows%20CI/badge.svg) |
 
 
 On top of the C++ library, GTSAM includes [wrappers for MATLAB & Python](#wrappers).
@@ -55,7 +55,7 @@ Optional prerequisites - used automatically if findable by CMake:
 
 GTSAM 4 introduces several new features, most notably Expressions and a Python toolbox. It also introduces traits, a C++ technique that allows optimizing with non-GTSAM types. That opens the door to retiring geometric types such as Point2 and Point3 to pure Eigen types, which we also do. A significant change which will not trigger a compile error is that zero-initializing of Point2 and Point3 is deprecated, so please be aware that this might render functions using their default constructor incorrect.
 
- There is a flag `GTSAM_ALLOW_DEPRECATED_SINCE_V42` for newly deprecated methods since the 4.2 release, which is on by default, allowing anyone to just pull version 4.2 and compile.
+ There is a flag `GTSAM_ALLOW_DEPRECATED_SINCE_V43` for newly deprecated methods since the 4.3 release, which is on by default, allowing anyone to just pull version 4.3 and compile.
 
 
 ## Wrappers

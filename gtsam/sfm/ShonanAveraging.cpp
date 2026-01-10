@@ -37,11 +37,12 @@
 #include <random>
 #include <set>
 #include <vector>
+#include <cassert>
 
 namespace gtsam {
 
 // In Wrappers we have no access to this so have a default ready
-static std::mt19937 kRandomNumberGenerator(42);
+static std::mt19937 kPRNG(42);
 
 using Sparse = Eigen::SparseMatrix<double>;
 
@@ -67,20 +68,15 @@ ShonanAveragingParameters<d>::ShonanAveragingParameters(
   builderParameters.augmentationWeight = SubgraphBuilderParameters::SKELETON;
   builderParameters.augmentationFactor = 0.0;
 
-  auto pcg = boost::make_shared<PCGSolverParameters>();
-
   // Choose optimization method
   if (method == "SUBGRAPH") {
     lm.iterativeParams =
-        boost::make_shared<SubgraphSolverParameters>(builderParameters);
+        std::make_shared<SubgraphSolverParameters>(builderParameters);
   } else if (method == "SGPC") {
-    pcg->preconditioner_ =
-        boost::make_shared<SubgraphPreconditionerParameters>(builderParameters);
-    lm.iterativeParams = pcg;
+    lm.iterativeParams = std::make_shared<PCGSolverParameters>(
+        std::make_shared<SubgraphPreconditionerParameters>(builderParameters));
   } else if (method == "JACOBI") {
-    pcg->preconditioner_ =
-        boost::make_shared<BlockJacobiPreconditionerParameters>();
-    lm.iterativeParams = pcg;
+    lm.iterativeParams = std::make_shared<PCGSolverParameters>(std::make_shared<BlockJacobiPreconditionerParameters>());
   } else if (method == "QR") {
     lm.setLinearSolverType("MULTIFRONTAL_QR");
   } else if (method == "CHOLESKY") {
@@ -142,7 +138,7 @@ ShonanAveraging<d>::ShonanAveraging(const Measurements &measurements,
 template <size_t d>
 NonlinearFactorGraph ShonanAveraging<d>::buildGraphAt(size_t p) const {
   NonlinearFactorGraph graph;
-  auto G = boost::make_shared<Matrix>(SO<-1>::VectorizedGenerators(p));
+  auto G = std::make_shared<Matrix>(SO<-1>::VectorizedGenerators(p));
 
   for (const auto &measurement : measurements_) {
     const auto &keys = measurement.keys();
@@ -172,23 +168,21 @@ double ShonanAveraging<d>::costAt(size_t p, const Values &values) const {
 
 /* ************************************************************************* */
 template <size_t d>
-boost::shared_ptr<LevenbergMarquardtOptimizer>
+std::shared_ptr<LevenbergMarquardtOptimizer>
 ShonanAveraging<d>::createOptimizerAt(size_t p, const Values &initial) const {
   // Build graph
   NonlinearFactorGraph graph = buildGraphAt(p);
 
   // Anchor prior is added here as depends on initial value (and cost is zero)
   if (parameters_.alpha > 0) {
-    size_t i;
-    Rot value;
     const size_t dim = SOn::Dimension(p);
-    std::tie(i, value) = parameters_.anchor;
+    const auto [i, value] = parameters_.anchor;
     auto model = noiseModel::Isotropic::Precision(dim, parameters_.alpha);
     graph.emplace_shared<PriorFactor<SOn>>(i, SOn::Lift(p, value.matrix()),
                                            model);
   }
   // Optimize
-  return boost::make_shared<LevenbergMarquardtOptimizer>(graph, initial,
+  return std::make_shared<LevenbergMarquardtOptimizer>(graph, initial,
                                                          parameters_.lm);
 }
 
@@ -337,13 +331,13 @@ double ShonanAveraging<d>::cost(const Values &values) const {
 template <typename T, size_t d>
 static double Kappa(const BinaryMeasurement<T> &measurement,
                     const ShonanAveragingParameters<d> &parameters) {
-  const auto &isotropic = boost::dynamic_pointer_cast<noiseModel::Isotropic>(
+  const auto &isotropic = std::dynamic_pointer_cast<noiseModel::Isotropic>(
       measurement.noiseModel());
   double sigma;
   if (isotropic) {
     sigma = isotropic->sigma();
   } else {
-    const auto &robust = boost::dynamic_pointer_cast<noiseModel::Robust>(
+    const auto &robust = std::dynamic_pointer_cast<noiseModel::Robust>(
         measurement.noiseModel());
     // Check if noise model is robust
     if (robust) {
@@ -554,7 +548,7 @@ static bool PowerMinimumEigenValue(
   }
 
   const Sparse C = pmEigenValue * Matrix::Identity(A.rows(), A.cols()).sparseView() - A;
-  const boost::optional<Vector> initial = perturb(S.row(0));
+  const std::optional<Vector> initial = perturb(S.row(0));
   AcceleratedPowerMethod<Sparse> apmShiftedOperator(C, initial);
 
   const bool minConverged = apmShiftedOperator.compute(
@@ -576,6 +570,8 @@ static bool PowerMinimumEigenValue(
  * nontrivial function, perform_op(x,y), that computes and returns the product
  * y = (A + sigma*I) x */
 struct MatrixProdFunctor {
+  using Scalar = double;
+
   // Const reference to an externally-held matrix whose minimum-eigenvalue we
   // want to compute
   const Sparse &A_;
@@ -636,13 +632,13 @@ static bool SparseMinimumEigenValue(
     Eigen::Index numLanczosVectors = 20) {
   // a. Estimate the largest-magnitude eigenvalue of this matrix using Lanczos
   MatrixProdFunctor lmOperator(A);
-  Spectra::SymEigsSolver<double, Spectra::SELECT_EIGENVALUE::LARGEST_MAGN,
-                         MatrixProdFunctor>
-      lmEigenValueSolver(&lmOperator, 1, std::min(numLanczosVectors, A.rows()));
+  Spectra::SymEigsSolver<MatrixProdFunctor> lmEigenValueSolver(
+      lmOperator, 1, std::min(numLanczosVectors, A.rows()));
   lmEigenValueSolver.init();
 
-  const int lmConverged = lmEigenValueSolver.compute(
-      maxIterations, 1e-4, Spectra::SELECT_EIGENVALUE::LARGEST_MAGN);
+  const int lmConverged =
+      lmEigenValueSolver.compute(Spectra::SortRule::LargestMagn, maxIterations,
+                                 1e-4, Spectra::SortRule::LargestMagn);
 
   // Check convergence and bail out if necessary
   if (lmConverged != 1) return false;
@@ -670,10 +666,8 @@ static bool SparseMinimumEigenValue(
 
   MatrixProdFunctor minShiftedOperator(A, -2 * lmEigenValue);
 
-  Spectra::SymEigsSolver<double, Spectra::SELECT_EIGENVALUE::LARGEST_MAGN,
-                         MatrixProdFunctor>
-      minEigenValueSolver(&minShiftedOperator, 1,
-                          std::min(numLanczosVectors, A.rows()));
+  Spectra::SymEigsSolver<MatrixProdFunctor> minEigenValueSolver(
+      minShiftedOperator, 1, std::min(numLanczosVectors, A.rows()));
 
   // If S is a critical point of F, then S^T is also in the null space of S -
   // Lambda(S) (cf. Lemma 6 of the tech report), and therefore its rows are
@@ -701,8 +695,9 @@ static bool SparseMinimumEigenValue(
   // order to be able to estimate the smallest eigenvalue within an *absolute*
   // tolerance of 'minEigenvalueNonnegativityTolerance'
   const int minConverged = minEigenValueSolver.compute(
-      maxIterations, minEigenvalueNonnegativityTolerance / lmEigenValue,
-      Spectra::SELECT_EIGENVALUE::LARGEST_MAGN);
+      Spectra::SortRule::LargestMagn, maxIterations,
+      minEigenvalueNonnegativityTolerance / lmEigenValue,
+      Spectra::SortRule::LargestMagn);
 
   if (minConverged != 1) return false;
 
@@ -755,7 +750,7 @@ std::pair<double, Vector> ShonanAveraging<d>::computeMinEigenVector(
     const Values &values) const {
   Vector minEigenVector;
   double minEigenValue = computeMinEigenValue(values, &minEigenVector);
-  return std::make_pair(minEigenValue, minEigenVector);
+  return {minEigenValue, minEigenVector};
 }
 
 /* ************************************************************************* */
@@ -874,7 +869,7 @@ Values ShonanAveraging<d>::initializeRandomly(std::mt19937 &rng) const {
 /* ************************************************************************* */
 template <size_t d>
 Values ShonanAveraging<d>::initializeRandomly() const {
-  return initializeRandomly(kRandomNumberGenerator);
+  return initializeRandomly(kPRNG);
 }
 
 /* ************************************************************************* */
@@ -888,7 +883,7 @@ Values ShonanAveraging<d>::initializeRandomlyAt(size_t p,
 /* ************************************************************************* */
 template <size_t d>
 Values ShonanAveraging<d>::initializeRandomlyAt(size_t p) const {
-  return initializeRandomlyAt(p, kRandomNumberGenerator);
+  return initializeRandomlyAt(p, kPRNG);
 }
 
 /* ************************************************************************* */
@@ -896,6 +891,9 @@ template <size_t d>
 std::pair<Values, double> ShonanAveraging<d>::run(const Values &initialEstimate,
                                                   size_t pMin,
                                                   size_t pMax) const {
+  if (pMin < d) {
+    throw std::runtime_error("pMin is smaller than the base dimension d");
+  }
   Values Qstar;
   Values initialSOp = LiftTo<Rot>(pMin, initialEstimate);  // lift to pMin!
   for (size_t p = pMin; p <= pMax; p++) {
@@ -908,7 +906,7 @@ std::pair<Values, double> ShonanAveraging<d>::run(const Values &initialEstimate,
             "When using robust norm, Shonan only tests a single rank. Set pMin = pMax");
       }
       const Values SO3Values = roundSolution(Qstar);
-      return std::make_pair(SO3Values, 0);
+      return {SO3Values, 0};
     } else {
       // Check certificate of global optimality
       Vector minEigenVector;
@@ -916,7 +914,7 @@ std::pair<Values, double> ShonanAveraging<d>::run(const Values &initialEstimate,
       if (minEigenValue > parameters_.optimalityThreshold) {
         // If at global optimum, round and return solution
         const Values SO3Values = roundSolution(Qstar);
-        return std::make_pair(SO3Values, minEigenValue);
+        return {SO3Values, minEigenValue};
       }
 
       // Not at global optimimum yet, so check whether we will go to next level
@@ -949,7 +947,7 @@ ShonanAveraging2::ShonanAveraging2(string g2oFile, const Parameters &parameters)
 static BinaryMeasurement<Rot2> convertPose2ToBinaryMeasurementRot2(
     const BetweenFactor<Pose2>::shared_ptr &f) {
   auto gaussian =
-      boost::dynamic_pointer_cast<noiseModel::Gaussian>(f->noiseModel());
+      std::dynamic_pointer_cast<noiseModel::Gaussian>(f->noiseModel());
   if (!gaussian)
     throw std::invalid_argument(
         "parseMeasurements<Rot2> can only convert Pose2 measurements "
@@ -997,7 +995,7 @@ ShonanAveraging3::ShonanAveraging3(string g2oFile, const Parameters &parameters)
 static BinaryMeasurement<Rot3> convert(
     const BetweenFactor<Pose3>::shared_ptr &f) {
   auto gaussian =
-      boost::dynamic_pointer_cast<noiseModel::Gaussian>(f->noiseModel());
+      std::dynamic_pointer_cast<noiseModel::Gaussian>(f->noiseModel());
   if (!gaussian)
     throw std::invalid_argument(
         "parseMeasurements<Rot3> can only convert Pose3 measurements "

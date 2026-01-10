@@ -34,8 +34,8 @@ class GTSAM_EXPORT HybridNonlinearFactorGraph : public HybridFactorGraph {
  protected:
  public:
   using Base = HybridFactorGraph;
-  using This = HybridNonlinearFactorGraph;     ///< this class
-  using shared_ptr = boost::shared_ptr<This>;  ///< shared_ptr to This
+  using This = HybridNonlinearFactorGraph;   ///< this class
+  using shared_ptr = std::shared_ptr<This>;  ///< shared_ptr to This
 
   using Values = gtsam::Values;  ///< backwards compatibility
   using Indices = KeyVector;     ///> map from keys to values
@@ -63,6 +63,16 @@ class GTSAM_EXPORT HybridNonlinearFactorGraph : public HybridFactorGraph {
       const std::string& s = "HybridNonlinearFactorGraph",
       const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override;
 
+  /** print errors along with factors*/
+  void printErrors(
+      const HybridValues& values,
+      const std::string& str = "HybridNonlinearFactorGraph: ",
+      const KeyFormatter& keyFormatter = DefaultKeyFormatter,
+      const std::function<bool(const Factor* /*factor*/,
+                               double /*whitenedError*/, size_t /*index*/)>&
+          printCondition =
+              [](const Factor*, double, size_t) { return true; }) const;
+
   /// @}
   /// @name Standard Interface
   /// @{
@@ -74,8 +84,42 @@ class GTSAM_EXPORT HybridNonlinearFactorGraph : public HybridFactorGraph {
    * @param continuousValues: Dictionary of continuous values.
    * @return HybridGaussianFactorGraph::shared_ptr
    */
-  boost::shared_ptr<HybridGaussianFactorGraph> linearize(
+  std::shared_ptr<HybridGaussianFactorGraph> linearize(
       const Values& continuousValues) const;
+
+  /// Expose error(const HybridValues&) method.
+  using Base::error;
+
+  /**
+   * @brief Compute error of (hybrid) nonlinear factors and discrete factors
+   * over each discrete assignment, and return as a tree.
+   *
+   * Error \f$ e = \Vert f(x) - \mu \Vert_{\Sigma} \f$.
+   *
+   * @note: Gaussian and hybrid Gaussian factors are not considered!
+   *
+   * @param values Manifold values at which to compute the error.
+   * @return AlgebraicDecisionTree<Key>
+   */
+  AlgebraicDecisionTree<Key> errorTree(const Values& values) const;
+
+  /**
+   * @brief Computer posterior P(M|X=x) when all continuous values X are given.
+   * This is efficient as this simply takes -exp(.) of errorTree and normalizes.
+   *
+   * @note Not a DiscreteConditional as the cardinalities of the DiscreteKeys,
+   * which we would need, are hard to recover.
+   *
+   * @param continuousValues Continuous values x to condition on.
+   * @return DecisionTreeFactor
+   */
+  AlgebraicDecisionTree<Key> discretePosterior(
+      const Values& continuousValues) const;
+
+  /// Restrict all factors in the graph to the given discrete values.
+  HybridNonlinearFactorGraph restrict(
+      const DiscreteValues& assignment) const;
+
   /// @}
 };
 

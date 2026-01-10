@@ -13,6 +13,7 @@
  *  @file HybridFactor.h
  *  @date Mar 11, 2022
  *  @author Fan Jiang
+ *  @author Varun Agrawal
  */
 
 #pragma once
@@ -20,6 +21,7 @@
 #include <gtsam/base/Testable.h>
 #include <gtsam/discrete/DecisionTree.h>
 #include <gtsam/discrete/DiscreteKey.h>
+#include <gtsam/discrete/TableFactor.h>
 #include <gtsam/inference/Factor.h>
 #include <gtsam/linear/GaussianFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
@@ -29,9 +31,6 @@
 namespace gtsam {
 
 class HybridValues;
-
-/// Alias for DecisionTree of GaussianFactorGraphs
-using GaussianFactorGraphTree = DecisionTree<Key, GaussianFactorGraph>;
 
 KeyVector CollectKeys(const KeyVector &continuousKeys,
                       const DiscreteKeys &discreteKeys);
@@ -43,17 +42,20 @@ DiscreteKeys CollectDiscreteKeys(const DiscreteKeys &key1,
  * Base class for *truly* hybrid probabilistic factors
  *
  * Examples:
- *  - MixtureFactor
- *  - GaussianMixtureFactor
- *  - GaussianMixture
+ *  - HybridNonlinearFactor
+ *  - HybridGaussianFactor
+ *  - HybridGaussianConditional
  *
  * @ingroup hybrid
  */
 class GTSAM_EXPORT HybridFactor : public Factor {
+ public:
+  /// Enum to help with categorizing hybrid factors.
+  enum class Category { None, Discrete, Continuous, Hybrid };
+
  private:
-  bool isDiscrete_ = false;
-  bool isContinuous_ = false;
-  bool isHybrid_ = false;
+  /// Record what category of HybridFactor this is.
+  Category category_ = Category::None;
 
  protected:
   // Set of DiscreteKeys for this factor.
@@ -64,7 +66,7 @@ class GTSAM_EXPORT HybridFactor : public Factor {
  public:
   // typedefs needed to play nice with gtsam
   typedef HybridFactor This;  ///< This class
-  typedef boost::shared_ptr<HybridFactor>
+  typedef std::shared_ptr<HybridFactor>
       shared_ptr;       ///< shared_ptr to this class
   typedef Factor Base;  ///< Our base class
 
@@ -97,9 +99,6 @@ class GTSAM_EXPORT HybridFactor : public Factor {
   HybridFactor(const KeyVector &continuousKeys,
                const DiscreteKeys &discreteKeys);
 
-  /// Virtual destructor
-  virtual ~HybridFactor() = default;
-
   /// @}
   /// @name Testable
   /// @{
@@ -117,13 +116,13 @@ class GTSAM_EXPORT HybridFactor : public Factor {
   /// @{
 
   /// True if this is a factor of discrete variables only.
-  bool isDiscrete() const { return isDiscrete_; }
+  bool isDiscrete() const { return category_ == Category::Discrete; }
 
   /// True if this is a factor of continuous variables only.
-  bool isContinuous() const { return isContinuous_; }
+  bool isContinuous() const { return category_ == Category::Continuous; }
 
   /// True is this is a Discrete-Continuous factor.
-  bool isHybrid() const { return isHybrid_; }
+  bool isHybrid() const { return category_ == Category::Hybrid; }
 
   /// Return the number of continuous variables in this factor.
   size_t nrContinuous() const { return continuousKeys_.size(); }
@@ -134,20 +133,28 @@ class GTSAM_EXPORT HybridFactor : public Factor {
   /// Return only the continuous keys for this factor.
   const KeyVector &continuousKeys() const { return continuousKeys_; }
 
+  /// Compute tree of linear errors.
+  virtual AlgebraicDecisionTree<Key> errorTree(
+      const VectorValues &values) const = 0;
+
+  /// Restrict the factor to the given discrete values.
+  virtual std::shared_ptr<Factor> restrict(
+      const DiscreteValues &discreteValues) const = 0;
+
   /// @}
 
  private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template <class ARCHIVE>
   void serialize(ARCHIVE &ar, const unsigned int /*version*/) {
     ar &BOOST_SERIALIZATION_BASE_OBJECT_NVP(Base);
-    ar &BOOST_SERIALIZATION_NVP(isDiscrete_);
-    ar &BOOST_SERIALIZATION_NVP(isContinuous_);
-    ar &BOOST_SERIALIZATION_NVP(isHybrid_);
+    ar &BOOST_SERIALIZATION_NVP(category_);
     ar &BOOST_SERIALIZATION_NVP(discreteKeys_);
     ar &BOOST_SERIALIZATION_NVP(continuousKeys_);
   }
+#endif
 };
 // HybridFactor
 

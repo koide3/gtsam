@@ -75,9 +75,10 @@ class GTSAM_EXPORT Similarity3 : public LieGroup<Similarity3, 7> {
   bool operator==(const Similarity3& other) const;
 
   /// Print with optional string
-  void print(const std::string& s) const;
+  void print(const std::string& s = "") const;
 
-  friend std::ostream& operator<<(std::ostream& os, const Similarity3& p);
+  GTSAM_EXPORT friend std::ostream& operator<<(std::ostream& os,
+                                               const Similarity3& p);
 
   /// @}
   /// @name Group
@@ -98,8 +99,8 @@ class GTSAM_EXPORT Similarity3 : public LieGroup<Similarity3, 7> {
 
   /// Action on a point p is s*(R*p+t)
   Point3 transformFrom(const Point3& p,                          //
-                       OptionalJacobian<3, 7> H1 = boost::none,  //
-                       OptionalJacobian<3, 3> H2 = boost::none) const;
+                       OptionalJacobian<3, 7> H1 = {},  //
+                       OptionalJacobian<3, 3> H2 = {}) const;
 
   /**
    * Action on a pose T.
@@ -132,47 +133,51 @@ class GTSAM_EXPORT Similarity3 : public LieGroup<Similarity3, 7> {
    * computed using the algorithm described here:
    * http://www5.informatik.uni-erlangen.de/Forschung/Publikationen/2005/Zinsser05-PSR.pdf
    */
-  static Similarity3 Align(const std::vector<Pose3Pair>& abPosePairs);
+  static Similarity3 Align(const Pose3Pairs& abPosePairs);
 
   /// @}
   /// @name Lie Group
   /// @{
 
+  using LieAlgebra = Matrix4;
+
   /** Log map at the identity
    * \f$ [R_x,R_y,R_z, t_x, t_y, t_z, \lambda] \f$
    */
   static Vector7 Logmap(const Similarity3& s,  //
-                        OptionalJacobian<7, 7> Hm = boost::none);
+                        OptionalJacobian<7, 7> Hm = {});
 
   /** Exponential map at the identity
    */
   static Similarity3 Expmap(const Vector7& v,  //
-                            OptionalJacobian<7, 7> Hm = boost::none);
+                            OptionalJacobian<7, 7> Hm = {});
 
   /// Chart at the origin
   struct ChartAtOrigin {
     static Similarity3 Retract(const Vector7& v,
-                               ChartJacobian H = boost::none) {
+                               ChartJacobian H = {}) {
       return Similarity3::Expmap(v, H);
     }
     static Vector7 Local(const Similarity3& other,
-                         ChartJacobian H = boost::none) {
+                         ChartJacobian H = {}) {
       return Similarity3::Logmap(other, H);
     }
   };
 
   using LieGroup<Similarity3, 7>::inverse;
 
-  /**
-   * wedge for Similarity3:
-   * @param xi 7-dim twist (w,u,lambda) where
-   * @return 4*4 element of Lie algebra that can be exponentiated
-   * TODO(frank): rename to Hat, make part of traits
-   */
-  static Matrix4 wedge(const Vector7& xi);
-
   /// Project from one tangent space to another
   Matrix7 AdjointMap() const;
+
+  /**
+   * Hat for Similarity3:
+   * @param xi 7-dim twist (w,u,lambda) where
+   * @return 4*4 element of Lie algebra that can be exponentiated
+   */
+  static Matrix4 Hat(const Vector7& xi);
+
+  /// Vee maps from Lie algebra to tangent vector
+  static Vector7 Vee(const Matrix4& X);
 
   /// @}
   /// @name Standard interface
@@ -197,25 +202,50 @@ class GTSAM_EXPORT Similarity3 : public LieGroup<Similarity3, 7> {
   inline size_t dim() const { return 7; }
 
   /// @}
+  /// @name Deprecated
+  /// @{
+
+#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V43
+  /// @deprecated: use Similarity3::Hat
+    static Matrix4 wedge(const Vector7& xi) {
+      return Similarity3::Hat(xi);
+    }
+#endif
+  
+  /// @}
   /// @name Helper functions
   /// @{
 
  private:
+
+  #if GTSAM_ENABLE_BOOST_SERIALIZATION
+    /** Serialization function */
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int /*version*/) {
+      ar & BOOST_SERIALIZATION_NVP(R_);
+      ar & BOOST_SERIALIZATION_NVP(t_);
+      ar & BOOST_SERIALIZATION_NVP(s_);
+    }
+  #endif
+
   /// Calculate expmap and logmap coefficients.
   static Matrix3 GetV(Vector3 w, double lambda);
 
   /// @}
 };
 
+#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V43
+/// @deprecated: use Similarity3::Hat
 template <>
 inline Matrix wedge<Similarity3>(const Vector& xi) {
-  return Similarity3::wedge(xi);
+  return Similarity3::Hat(xi);
 }
+#endif
+template <>
+struct traits<Similarity3> : public internal::MatrixLieGroup<Similarity3> {};
 
 template <>
-struct traits<Similarity3> : public internal::LieGroup<Similarity3> {};
-
-template <>
-struct traits<const Similarity3> : public internal::LieGroup<Similarity3> {};
+struct traits<const Similarity3> : public internal::MatrixLieGroup<Similarity3> {};
 
 }  // namespace gtsam

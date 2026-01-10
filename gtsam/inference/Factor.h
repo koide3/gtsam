@@ -21,12 +21,15 @@
 
 #pragma once
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #include <boost/serialization/nvp.hpp>
-#include <boost/shared_ptr.hpp>
-
-#include <gtsam/base/types.h>
+#endif
 #include <gtsam/base/FastVector.h>
+#include <gtsam/base/types.h>
 #include <gtsam/inference/Key.h>
+
+#include <algorithm>
+#include <memory>
 
 namespace gtsam {
 
@@ -70,7 +73,7 @@ namespace gtsam {
   private:
     // These typedefs are private because they must be overridden in derived classes.
     typedef Factor This; ///< This class
-    typedef boost::shared_ptr<Factor> shared_ptr; ///< A shared_ptr to this class.
+    typedef std::shared_ptr<Factor> shared_ptr; ///< A shared_ptr to this class.
 
   public:
     /// Iterator over keys
@@ -190,16 +193,16 @@ namespace gtsam {
     /// @}
 
   private:
-
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /// @name Serialization
     /// @{
-
     /** Serialization function */
     friend class boost::serialization::access;
     template<class Archive>
     void serialize(Archive & ar, const unsigned int /*version*/) {
       ar & BOOST_SERIALIZATION_NVP(keys_);
     }
+#endif
 
     /// @}
 

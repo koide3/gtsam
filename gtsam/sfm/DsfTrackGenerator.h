@@ -43,13 +43,13 @@ struct Keypoints {
 
   // Optional scale of the detections, of shape N.
   // Note: gtsam::Vector is typedef'd for Eigen::VectorXd.
-  boost::optional<gtsam::Vector> scales;
+  std::optional<gtsam::Vector> scales;
 
   /// Optional confidences/responses for each detection, of shape N.
-  boost::optional<gtsam::Vector> responses;
+  std::optional<gtsam::Vector> responses;
 
-  Keypoints(const Eigen::MatrixX2d& coordinates)
-      : coordinates(coordinates){};  // boost::none
+  Keypoints(const Eigen::MatrixX2d &_coordinates)
+      : coordinates(_coordinates) {}
 };
 
 using KeypointsVector = std::vector<Keypoints>;
@@ -69,7 +69,7 @@ using MatchIndicesMap = std::map<IndexPair, CorrespondenceIndices>;
  *        correspondence indices, from each image.
  * @param Length-N list of keypoints, for N images/cameras.
  */
-std::vector<SfmTrack2d> tracksFromPairwiseMatches(
+std::vector<SfmTrack2d> GTSAM_EXPORT tracksFromPairwiseMatches(
     const MatchIndicesMap& matches, const KeypointsVector& keypoints,
     bool verbose = false);
 

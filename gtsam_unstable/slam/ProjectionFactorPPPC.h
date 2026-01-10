@@ -23,7 +23,6 @@
 #include <gtsam/nonlinear/NonlinearFactor.h>
 #include <gtsam_unstable/dllexport.h>
 
-#include <boost/optional.hpp>
 
 namespace gtsam {
 
@@ -33,7 +32,7 @@ namespace gtsam {
    * @ingroup slam
    */
 template <class POSE, class LANDMARK, class CALIBRATION = Cal3_S2>
-class GTSAM_UNSTABLE_EXPORT ProjectionFactorPPPC
+class ProjectionFactorPPPC
     : public NoiseModelFactorN<POSE, POSE, LANDMARK, CALIBRATION> {
  protected:
   Point2 measured_;  ///< 2D measurement
@@ -44,13 +43,16 @@ class GTSAM_UNSTABLE_EXPORT ProjectionFactorPPPC
 
  public:
   /// shorthand for base class type
-  typedef NoiseModelFactorN<POSE, POSE, LANDMARK, CALIBRATION> Base;
+  typedef NoiseModelFactor4<POSE, POSE, LANDMARK, CALIBRATION> Base;
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
 
   /// shorthand for this class
   typedef ProjectionFactorPPPC<POSE, LANDMARK, CALIBRATION> This;
 
   /// shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<This> shared_ptr;
+  typedef std::shared_ptr<This> shared_ptr;
 
   /// Default constructor
   ProjectionFactorPPPC() :
@@ -84,7 +86,7 @@ class GTSAM_UNSTABLE_EXPORT ProjectionFactorPPPC
 
     /// @return a deep copy of this factor
     NonlinearFactor::shared_ptr clone() const override {
-      return boost::static_pointer_cast<NonlinearFactor>(
+      return std::static_pointer_cast<NonlinearFactor>(
           NonlinearFactor::shared_ptr(new This(*this))); }
 
     /**
@@ -108,10 +110,8 @@ class GTSAM_UNSTABLE_EXPORT ProjectionFactorPPPC
 
     /// Evaluate error h(x)-z and optionally derivatives
     Vector evaluateError(const Pose3& pose, const Pose3& transform, const Point3& point, const CALIBRATION& K,
-        boost::optional<Matrix&> H1 = boost::none,
-        boost::optional<Matrix&> H2 = boost::none,
-        boost::optional<Matrix&> H3 = boost::none,
-        boost::optional<Matrix&> H4 = boost::none) const override {
+        OptionalMatrixType H1, OptionalMatrixType H2, OptionalMatrixType H3,
+        OptionalMatrixType H4) const override {
       try {
           if(H1 || H2 || H3 || H4) {
             Matrix H0, H02;
@@ -151,6 +151,7 @@ class GTSAM_UNSTABLE_EXPORT ProjectionFactorPPPC
 
   private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION    ///
     /// Serialization function
     friend class boost::serialization::access;
     template<class ARCHIVE>
@@ -160,6 +161,7 @@ class GTSAM_UNSTABLE_EXPORT ProjectionFactorPPPC
       ar & BOOST_SERIALIZATION_NVP(throwCheirality_);
       ar & BOOST_SERIALIZATION_NVP(verboseCheirality_);
     }
+#endif
 };
 
   /// traits

@@ -152,14 +152,18 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
 
     /// Rotations around Z, Y, then X axes as in http://en.wikipedia.org/wiki/Rotation_matrix, counterclockwise when looking from unchanging axis.
     static Rot3 RzRyRx(double x, double y, double z,
-                       OptionalJacobian<3, 1> Hx = boost::none,
-                       OptionalJacobian<3, 1> Hy = boost::none,
-                       OptionalJacobian<3, 1> Hz = boost::none);
+                       OptionalJacobian<3, 1> Hx = {},
+                       OptionalJacobian<3, 1> Hy = {},
+                       OptionalJacobian<3, 1> Hz = {});
 
     /// Rotations around Z, Y, then X axes as in http://en.wikipedia.org/wiki/Rotation_matrix, counterclockwise when looking from unchanging axis.
     inline static Rot3 RzRyRx(const Vector& xyz,
-                              OptionalJacobian<3, 3> H = boost::none) {
-      assert(xyz.size() == 3);
+                              OptionalJacobian<3, 3> H = {}) {
+#ifndef NDEBUG
+      if (xyz.size() != 3) {
+        throw;
+      }
+#endif
       Rot3 out;
       if (H) {
         Vector3 Hx, Hy, Hz;
@@ -194,9 +198,9 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
      * Positive roll is to right (decreasing yaw in aircraft).
      */
     static Rot3 Ypr(double y, double p, double r,
-                    OptionalJacobian<3, 1> Hy = boost::none,
-                    OptionalJacobian<3, 1> Hp = boost::none,
-                    OptionalJacobian<3, 1> Hr = boost::none) {
+                    OptionalJacobian<3, 1> Hy = {},
+                    OptionalJacobian<3, 1> Hp = {},
+                    OptionalJacobian<3, 1> Hr = {}) {
       return RzRyRx(r, p, y, Hr, Hp, Hy);
     }
 
@@ -347,8 +351,8 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
 
     // Cayley chart around origin
     struct CayleyChart {
-    static Rot3 Retract(const Vector3& v, OptionalJacobian<3, 3> H = boost::none);
-    static Vector3 Local(const Rot3& r, OptionalJacobian<3, 3> H = boost::none);
+    static Rot3 Retract(const Vector3& v, OptionalJacobian<3, 3> H = {});
+    static Vector3 Local(const Rot3& r, OptionalJacobian<3, 3> H = {});
     };
 
     /// Retraction from R^3 to Rot3 manifold using the Cayley transform
@@ -367,24 +371,19 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
     /// @name Lie Group
     /// @{
 
-    /**
-     * Exponential map at identity - create a rotation from canonical coordinates
-     * \f$ [R_x,R_y,R_z] \f$ using Rodrigues' formula
-     */
-    static Rot3 Expmap(const Vector3& v, OptionalJacobian<3,3> H = boost::none) {
-      if(H) *H = Rot3::ExpmapDerivative(v);
-#ifdef GTSAM_USE_QUATERNIONS
-      return traits<gtsam::Quaternion>::Expmap(v);
-#else
-      return Rot3(traits<SO3>::Expmap(v));
-#endif
-    }
+    using LieAlgebra = Matrix3;
 
     /**
-     * Log map at identity - returns the canonical coordinates
+     * Exponential map - create a rotation from canonical coordinates
+     * \f$ [R_x,R_y,R_z] \f$ using Rodrigues' formula
+     */
+    static Rot3 Expmap(const Vector3& v, OptionalJacobian<3,3> H = {});
+
+    /**
+     * Log map - returns the canonical coordinates
      * \f$ [R_x,R_y,R_z] \f$ of this rotation
      */
-    static Vector3 Logmap(const Rot3& R, OptionalJacobian<3,3> H = boost::none);
+    static Vector3 Logmap(const Rot3& R, OptionalJacobian<3,3> H = {});
 
     /// Derivative of Expmap
     static Matrix3 ExpmapDerivative(const Vector3& x);
@@ -396,12 +395,18 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
     Matrix3 AdjointMap() const { return matrix(); }
 
     // Chart at origin, depends on compile-time flag ROT3_DEFAULT_COORDINATES_MODE
-    struct ChartAtOrigin {
-      static Rot3 Retract(const Vector3& v, ChartJacobian H = boost::none);
-      static Vector3 Local(const Rot3& r, ChartJacobian H = boost::none);
+    struct GTSAM_EXPORT ChartAtOrigin {
+      static Rot3 Retract(const Vector3& v, ChartJacobian H = {});
+      static Vector3 Local(const Rot3& r, ChartJacobian H = {});
     };
 
     using LieGroup<Rot3, 3>::inverse; // version with derivative
+
+    /// Hat maps from tangent vector to Lie algebra
+    static inline Matrix3 Hat(const Vector3& xi) { return SO3::Hat(xi); }
+
+    /// Vee maps from Lie algebra to tangent vector
+    static inline Vector3 Vee(const Matrix3& X) { return SO3::Vee(X); }
 
     /// @}
     /// @name Group Action on Point3
@@ -410,27 +415,27 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
     /**
      * rotate point from rotated coordinate frame to world \f$ p^w = R_c^w p^c \f$
      */
-    Point3 rotate(const Point3& p, OptionalJacobian<3,3> H1 = boost::none,
-        OptionalJacobian<3,3> H2 = boost::none) const;
+    Point3 rotate(const Point3& p, OptionalJacobian<3,3> H1 = {},
+        OptionalJacobian<3,3> H2 = {}) const;
 
     /// rotate point from rotated coordinate frame to world = R*p
     Point3 operator*(const Point3& p) const;
 
     /// rotate point from world to rotated frame \f$ p^c = (R_c^w)^T p^w \f$
-    Point3 unrotate(const Point3& p, OptionalJacobian<3,3> H1 = boost::none,
-        OptionalJacobian<3,3> H2=boost::none) const;
+    Point3 unrotate(const Point3& p, OptionalJacobian<3,3> H1 = {},
+        OptionalJacobian<3,3> H2={}) const;
 
     /// @}
     /// @name Group Action on Unit3
     /// @{
 
     /// rotate 3D direction from rotated coordinate frame to world frame
-    Unit3 rotate(const Unit3& p, OptionalJacobian<2,3> HR = boost::none,
-        OptionalJacobian<2,2> Hp = boost::none) const;
+    Unit3 rotate(const Unit3& p, OptionalJacobian<2,3> HR = {},
+        OptionalJacobian<2,2> Hp = {}) const;
 
     /// unrotate 3D direction from world frame to rotated coordinate frame
-    Unit3 unrotate(const Unit3& p, OptionalJacobian<2,3> HR = boost::none,
-        OptionalJacobian<2,2> Hp = boost::none) const;
+    Unit3 unrotate(const Unit3& p, OptionalJacobian<2,3> HR = {},
+        OptionalJacobian<2,2> Hp = {}) const;
 
     /// rotate 3D direction from rotated coordinate frame to world frame
     Unit3 operator*(const Unit3& p) const;
@@ -447,9 +452,6 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
      */
     Matrix3 transpose() const;
 
-    /// @deprecated, this is base 1, and was just confusing
-    Point3 column(int index) const;
-
     Point3 r1() const; ///< first column
     Point3 r2() const; ///< second column
     Point3 r3() const; ///< third column
@@ -458,19 +460,19 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
      * Use RQ to calculate xyz angle representation
      * @return a vector containing x,y,z s.t. R = Rot3::RzRyRx(x,y,z)
      */
-    Vector3 xyz(OptionalJacobian<3, 3> H = boost::none) const;
+    Vector3 xyz(OptionalJacobian<3, 3> H = {}) const;
 
     /**
      * Use RQ to calculate yaw-pitch-roll angle representation
      * @return a vector containing ypr s.t. R = Rot3::Ypr(y,p,r)
      */
-    Vector3 ypr(OptionalJacobian<3, 3> H = boost::none) const;
+    Vector3 ypr(OptionalJacobian<3, 3> H = {}) const;
 
     /**
      * Use RQ to calculate roll-pitch-yaw angle representation
      * @return a vector containing rpy s.t. R = Rot3::Ypr(y,p,r)
      */
-    Vector3 rpy(OptionalJacobian<3, 3> H = boost::none) const;
+    Vector3 rpy(OptionalJacobian<3, 3> H = {}) const;
 
     /**
      * Accessor to get to component of angle representations
@@ -478,7 +480,7 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
      * you should instead use xyz() or ypr()
      * TODO: make this more efficient
      */
-    double roll(OptionalJacobian<1, 3> H = boost::none) const;
+    double roll(OptionalJacobian<1, 3> H = {}) const;
 
     /**
      * Accessor to get to component of angle representations
@@ -486,7 +488,7 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
      * you should instead use xyz() or ypr()
      * TODO: make this more efficient
      */
-    double pitch(OptionalJacobian<1, 3> H = boost::none) const;
+    double pitch(OptionalJacobian<1, 3> H = {}) const;
 
     /**
      * Accessor to get to component of angle representations
@@ -494,7 +496,7 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
      * you should instead use xyz() or ypr()
      * TODO: make this more efficient
      */
-    double yaw(OptionalJacobian<1, 3> H = boost::none) const;
+    double yaw(OptionalJacobian<1, 3> H = {}) const;
 
     /// @}
     /// @name Advanced Interface
@@ -515,30 +517,32 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
      */
     gtsam::Quaternion toQuaternion() const;
 
-#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V42
-    /**
-     * Converts to a generic matrix to allow for use with matlab
-     * In format: w x y z
-     * @deprecated: use Rot3::toQuaternion() instead.
-     * If still using this API, remind that in the returned Vector `V`,
-     * `V.x()` denotes the actual `qw`, `V.y()` denotes 'qx', `V.z()` denotes `qy`, and `V.w()` denotes 'qz'.
-     */
-    Vector GTSAM_DEPRECATED quaternion() const;
-#endif
-
     /**
      * @brief Spherical Linear intERPolation between *this and other
      * @param t a value between 0 and 1
-     * @param other final point of iterpolation geodesic on manifold
+     * @param other final point of interpolation geodesic on manifold
      */
     Rot3 slerp(double t, const Rot3& other) const;
+
+    /// Vee maps from Lie algebra to tangent vector
+    inline Vector9 vec(OptionalJacobian<9, 3> H = {}) const { return SO3(matrix()).vec(H); }
 
     /// Output stream operator
     GTSAM_EXPORT friend std::ostream &operator<<(std::ostream &os, const Rot3& p);
 
     /// @}
+    /// @name deprecated
+    /// @{
+
+#ifdef GTSAM_ALLOW_DEPRECATED_SINCE_V43
+    /// @deprecated, this is base 1, and was just confusing
+    Point3 column(int index) const;
+#endif
+
+    /// @}
 
    private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template <class ARCHIVE>
@@ -561,6 +565,7 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
       ar& boost::serialization::make_nvp("z", quaternion_.z());
 #endif
     }
+#endif
 
 #ifdef GTSAM_USE_QUATERNIONS
   // only align if quaternion, Matrix3 has no alignment requirements
@@ -569,8 +574,8 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
 #endif
   };
 
-  /// std::vector of Rot3s, mainly for wrapper
-  using Rot3Vector = std::vector<Rot3, Eigen::aligned_allocator<Rot3> >;
+  /// std::vector of Rot3s, used in Matlab wrapper
+  using Rot3Vector = std::vector<Rot3, Eigen::aligned_allocator<Rot3>>;
 
   /**
    * [RQ] receives a 3 by 3 matrix and returns an upper triangular matrix R
@@ -583,13 +588,13 @@ class GTSAM_EXPORT Rot3 : public LieGroup<Rot3, 3> {
    * @return a vector [thetax, thetay, thetaz] in radians.
    */
   GTSAM_EXPORT std::pair<Matrix3, Vector3> RQ(
-      const Matrix3& A, OptionalJacobian<3, 9> H = boost::none);
+      const Matrix3& A, OptionalJacobian<3, 9> H = {});
 
   template<>
-  struct traits<Rot3> : public internal::LieGroup<Rot3> {};
+  struct traits<Rot3> : public internal::MatrixLieGroup<Rot3> {};
 
   template<>
-  struct traits<const Rot3> : public internal::LieGroup<Rot3> {};
+  struct traits<const Rot3> : public internal::MatrixLieGroup<Rot3> {};
   
 }  // namespace gtsam
 

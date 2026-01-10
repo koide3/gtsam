@@ -48,6 +48,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <cassert>
 
 using namespace gtsam;
 using namespace std;
@@ -95,7 +96,7 @@ Vector10 readInitialState(ifstream& file) {
   return initial_state;
 }
 
-boost::shared_ptr<PreintegratedCombinedMeasurements::Params> imuParams() {
+std::shared_ptr<PreintegratedCombinedMeasurements::Params> imuParams() {
   // We use the sensor specs to build the noise model for the IMU factor.
   double accel_noise_sigma = 0.0003924;
   double gyro_noise_sigma = 0.000205689024915;

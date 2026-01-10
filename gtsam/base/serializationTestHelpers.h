@@ -19,11 +19,16 @@
 
 #pragma once
 
+#include <gtsam/config.h>
+
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
+
 #include <iostream>
 #include <sstream>
 #include <string>
 
 #include <gtsam/base/serialization.h>
+#include <gtsam/base/TestableAssertions.h>
 
 #include <boost/serialization/serialization.hpp>
 #include <boost/filesystem.hpp>
@@ -174,3 +179,4 @@ bool equalsDereferencedBinary(const T& input = T()) {
 
 } // \namespace serializationTestHelpers
 } // \namespace gtsam
+#endif

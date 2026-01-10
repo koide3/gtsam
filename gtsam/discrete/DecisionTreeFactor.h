@@ -21,11 +21,12 @@
 #include <gtsam/discrete/AlgebraicDecisionTree.h>
 #include <gtsam/discrete/DiscreteFactor.h>
 #include <gtsam/discrete/DiscreteKey.h>
+#include <gtsam/discrete/Ring.h>
 #include <gtsam/inference/Ordering.h>
 
 #include <algorithm>
-#include <boost/shared_ptr.hpp>
 #include <map>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -47,13 +48,14 @@ namespace gtsam {
     // typedefs needed to play nice with gtsam
     typedef DecisionTreeFactor This;
     typedef DiscreteFactor Base;  ///< Typedef to base class
-    typedef boost::shared_ptr<DecisionTreeFactor> shared_ptr;
+    typedef std::shared_ptr<DecisionTreeFactor> shared_ptr;
     typedef AlgebraicDecisionTree<Key> ADT;
 
-   protected:
-    std::map<Key, size_t> cardinalities_;
+    // Needed since we have definitions in both DiscreteFactor and DecisionTree
+    using Base::Binary;
+    using Base::Unary;
+    using Base::UnaryAssignment;
 
-   public:
     /// @name Standard Constructors
     /// @{
 
@@ -63,11 +65,46 @@ namespace gtsam {
     /** Constructor from DiscreteKeys and AlgebraicDecisionTree */
     DecisionTreeFactor(const DiscreteKeys& keys, const ADT& potentials);
 
-    /** Constructor from doubles */
+    /**
+     * @brief Constructor from doubles
+     *
+     * @param keys The discrete keys.
+     * @param table The table of values.
+     *
+     * @throw std::invalid_argument if the size of `table` does not match the
+     * number of assignments.
+     *
+     * Example:
+     * @code{.cpp}
+     * DiscreteKey X(0,2), Y(1,3);
+     * const std::vector<double> table {2, 5, 3, 6, 4, 7};
+     * DecisionTreeFactor f1({X, Y}, table);
+     * @endcode
+     *
+     * The values in the table should be laid out so that the first key varies
+     * the slowest, and the last key the fastest.
+     */
     DecisionTreeFactor(const DiscreteKeys& keys,
-                      const std::vector<double>& table);
+                       const std::vector<double>& table);
 
-    /** Constructor from string */
+    /**
+     * @brief Constructor from string
+     *
+     * @param keys The discrete keys.
+     * @param table The table of values.
+     *
+     * @throw std::invalid_argument if the size of `table` does not match the
+     * number of assignments.
+     *
+     * Example:
+     * @code{.cpp}
+     * DiscreteKey X(0,2), Y(1,3);
+     * DecisionTreeFactor factor({X, Y}, "2 5 3 6 4 7");
+     * @endcode
+     *
+     * The values in the table should be laid out so that the first key varies
+     * the slowest, and the last key the fastest.
+     */
     DecisionTreeFactor(const DiscreteKeys& keys, const std::string& table);
 
     /// Single-key specialization
@@ -98,67 +135,118 @@ namespace gtsam {
     /// @name Standard Interface
     /// @{
 
-    /// Calculate probability for given values `x`, 
+    /// Calculate probability for given values, 
     /// is just look up in AlgebraicDecisionTree.
-    double evaluate(const DiscreteValues& values) const  {
+    virtual double evaluate(const Assignment<Key>& values) const override {
       return ADT::operator()(values);
     }
 
-    /// Evaluate probability density, sugar.
-    double operator()(const DiscreteValues& values) const override {
-      return ADT::operator()(values);
-    }
+    /// Disambiguate to use DiscreteFactor version. Mainly for wrapper
+    using DiscreteFactor::operator();
 
     /// Calculate error for DiscreteValues `x`, is -log(probability).
-    double error(const DiscreteValues& values) const;
+    double error(const DiscreteValues& values) const override;
+
+    /**
+     * @brief Multiply factors, DiscreteFactor::shared_ptr edition.
+     *
+     * This method accepts `DiscreteFactor::shared_ptr` and uses dynamic
+     * dispatch and specializations to perform the most efficient
+     * multiplication.
+     *
+     * While converting a DecisionTreeFactor to a TableFactor is efficient, the
+     * reverse is not. Hence we specialize the code to return a TableFactor if
+     * `f` is a TableFactor, and DecisionTreeFactor otherwise.
+     *
+     * @param f The factor to multiply with.
+     * @return DiscreteFactor::shared_ptr
+     */
+    virtual DiscreteFactor::shared_ptr multiply(
+        const DiscreteFactor::shared_ptr& f) const override;
+
+    /// multiply with a scalar
+    DiscreteFactor::shared_ptr operator*(double s) const override {
+      return std::make_shared<DecisionTreeFactor>(
+          apply([s](const double& a) { return Ring::mul(a, s); }));
+    }
 
     /// multiply two factors
     DecisionTreeFactor operator*(const DecisionTreeFactor& f) const override {
-      return apply(f, ADT::Ring::mul);
+      return apply(f, Ring::mul);
     }
 
     static double safe_div(const double& a, const double& b);
 
-    size_t cardinality(Key j) const { return cardinalities_.at(j); }
-
-    /// divide by factor f (safely)
+    /**
+     * @brief Divide by factor f (safely).
+     * Division of a factor \f$f(x, y)\f$ by another factor \f$g(y, z)\f$
+     * results in a function which involves all keys
+     * \f$(\frac{f}{g})(x, y, z) = f(x, y) / g(y, z)\f$
+     * 
+     * @param f The DecisinTreeFactor to divide by.
+     * @return DecisionTreeFactor 
+     */
     DecisionTreeFactor operator/(const DecisionTreeFactor& f) const {
       return apply(f, safe_div);
     }
 
-    /// Convert into a decisiontree
+    /// divide by DiscreteFactor::shared_ptr f (safely)
+    DiscreteFactor::shared_ptr operator/(
+        const DiscreteFactor::shared_ptr& f) const override;
+
+    /// Convert into a decision tree
     DecisionTreeFactor toDecisionTreeFactor() const override { return *this; }
 
     /// Create new factor by summing all values with the same separator values
-    shared_ptr sum(size_t nrFrontals) const {
-      return combine(nrFrontals, ADT::Ring::add);
+    DiscreteFactor::shared_ptr sum(size_t nrFrontals) const override {
+      return combine(nrFrontals, Ring::add);
     }
 
     /// Create new factor by summing all values with the same separator values
-    shared_ptr sum(const Ordering& keys) const {
-      return combine(keys, ADT::Ring::add);
+    DiscreteFactor::shared_ptr sum(const Ordering& keys) const override {
+      return combine(keys, Ring::add);
+    }
+
+    /// Find the maximum value in the factor.
+    double max() const override { return ADT::max(); };
+
+    /// Create new factor by maximizing over all values with the same separator.
+    DiscreteFactor::shared_ptr max(size_t nrFrontals) const override {
+      return combine(nrFrontals, Ring::max);
     }
 
     /// Create new factor by maximizing over all values with the same separator.
-    shared_ptr max(size_t nrFrontals) const {
-      return combine(nrFrontals, ADT::Ring::max);
+    DiscreteFactor::shared_ptr max(const Ordering& keys) const override {
+      return combine(keys, Ring::max);
     }
 
-    /// Create new factor by maximizing over all values with the same separator.
-    shared_ptr max(const Ordering& keys) const {
-      return combine(keys, ADT::Ring::max);
-    }
-
+    /// Restrict the factor to the given assignment.
+    DiscreteFactor::shared_ptr restrict(
+        const DiscreteValues& assignment) const override;
+        
     /// @}
     /// @name Advanced Interface
     /// @{
+
+    /**
+     * Apply unary operator (*this) "op" f
+     * @param op a unary operator that operates on AlgebraicDecisionTree
+     */
+    DecisionTreeFactor apply(Unary op) const;
+
+    /**
+     * Apply unary operator (*this) "op" f
+     * @param op a unary operator that operates on AlgebraicDecisionTree. Takes
+     * both the assignment and the value.
+     */
+    DecisionTreeFactor apply(UnaryAssignment op) const;
 
     /**
      * Apply binary operator (*this) "op" f
      * @param f the second argument for op
      * @param op a binary operator that operates on AlgebraicDecisionTree
      */
-    DecisionTreeFactor apply(const DecisionTreeFactor& f, ADT::Binary op) const;
+    DecisionTreeFactor apply(const DecisionTreeFactor& f, Binary op) const;
 
     /**
      * Combine frontal variables using binary operator "op"
@@ -166,7 +254,7 @@ namespace gtsam {
      * @param op a binary operator that operates on AlgebraicDecisionTree
      * @return shared pointer to newly created DecisionTreeFactor
      */
-    shared_ptr combine(size_t nrFrontals, ADT::Binary op) const;
+    shared_ptr combine(size_t nrFrontals, Binary op) const;
 
     /**
      * Combine frontal variables in an Ordering using binary operator "op"
@@ -174,13 +262,24 @@ namespace gtsam {
      * @param op a binary operator that operates on AlgebraicDecisionTree
      * @return shared pointer to newly created DecisionTreeFactor
      */
-    shared_ptr combine(const Ordering& keys, ADT::Binary op) const;
+    shared_ptr combine(const Ordering& keys, Binary op) const;
 
     /// Enumerate all values into a map from values to double.
     std::vector<std::pair<DiscreteValues, double>> enumerate() const;
 
-    /// Return all the discrete keys associated with this factor.
-    DiscreteKeys discreteKeys() const;
+    /// Get all the probabilities in order of assignment values
+    std::vector<double> probabilities() const;
+
+    /**
+     * @brief Compute the probability value which is the threshold above which
+     * only `N` leaves are present.
+     *
+     * This is used for pruning out the smaller probabilities.
+     *
+     * @param N The number of leaves to keep post pruning.
+     * @return double
+     */
+    double computeThreshold(const size_t N) const;
 
     /**
      * @brief Prune the decision tree of discrete variables.
@@ -201,6 +300,12 @@ namespace gtsam {
      * @return DecisionTreeFactor
      */
     DecisionTreeFactor prune(size_t maxNrAssignments) const;
+
+    /**
+     * Get the number of non-zero values contained in this factor.
+     * It could be much smaller than `prod_{key}(cardinality(key))`.
+     */
+    uint64_t nrValues() const override { return nrLeaves(); }
 
     /// @}
     /// @name Wrapper support
@@ -253,18 +358,18 @@ namespace gtsam {
   /// @}
 
    private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template <class ARCHIVE>
     void serialize(ARCHIVE& ar, const unsigned int /*version*/) {
       ar& BOOST_SERIALIZATION_BASE_OBJECT_NVP(Base);
       ar& BOOST_SERIALIZATION_BASE_OBJECT_NVP(ADT);
-      ar& BOOST_SERIALIZATION_NVP(cardinalities_);
     }
+#endif
   };
 
 // traits
 template <>
 struct traits<DecisionTreeFactor> : public Testable<DecisionTreeFactor> {};
-
 }  // namespace gtsam

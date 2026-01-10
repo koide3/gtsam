@@ -18,8 +18,6 @@
 // \callgraph
 #pragma once
 
-#include <boost/range.hpp>
-
 #include <gtsam/inference/Key.h>
 
 namespace gtsam {
@@ -36,11 +34,13 @@ namespace gtsam {
    * `logProbability` is the main methods that need to be implemented in derived
    * classes. These two methods relate to the `error` method in the factor by:
    *   probability(x) = k exp(-error(x))
-   * where k is a normalization constant making \int probability(x) == 1.0, and
-   *   logProbability(x) = K - error(x)
-   * i.e., K = log(K). The normalization constant K is assumed to *not* depend
+   * where k is a normalization constant making
+   * \int probability(x) = \int k exp(-error(x)) == 1.0, and
+   * logProbability(x) = -(K + error(x))
+   * i.e., K = -log(k). The normalization constant k is assumed to *not* depend
    * on any argument, only (possibly) on the conditional parameters.
-   * This class provides a default logNormalizationConstant() == 0.0.
+   * This class provides a default negative log normalization constant
+   * negLogConstant() == 0.0.
    * 
    * There are four broad classes of conditionals that derive from Conditional:
    *
@@ -48,7 +48,7 @@ namespace gtsam {
    *   Gaussian density over a set of continuous variables.
    * - \b Discrete conditionals, implemented in \class DiscreteConditional, which
    *   represent a discrete conditional distribution over discrete variables.
-   * - \b Hybrid conditional densities, such as \class GaussianMixture, which is 
+   * - \b Hybrid conditional densities, such as \class HybridGaussianConditional, which is 
    *   a density over continuous variables given discrete/continuous parents.
    * - \b Symbolic factors, used to represent a graph structure, implemented in 
    *   \class SymbolicConditional. Only used for symbolic elimination etc.
@@ -70,12 +70,33 @@ namespace gtsam {
     /// Typedef to this class
     typedef Conditional<FACTOR,DERIVEDCONDITIONAL> This;
 
+
   public:
+    /** A mini implementation of an iterator range, to share const
+     * views of frontals and parents. */
+    typedef std::pair<typename FACTOR::const_iterator, typename FACTOR::const_iterator> ConstFactorRange;
+    struct ConstFactorRangeIterator {
+      ConstFactorRange range_;
+      // Delete default constructor
+      ConstFactorRangeIterator() = delete;
+      ConstFactorRangeIterator(ConstFactorRange const& x) : range_(x) {}
+      // Implement begin and end for iteration
+      typename FACTOR::const_iterator begin() const { return range_.first; }
+      typename FACTOR::const_iterator end() const { return range_.second; }
+      size_t size() const { return std::distance(range_.first, range_.second); }
+      const auto& front() const { return *begin(); }
+      // == operator overload for comparison with another iterator
+      template<class OTHER>
+      bool operator==(const OTHER& rhs) const {
+        return std::equal(begin(), end(), rhs.begin());
+      }
+    };
+
     /** View of the frontal keys (call frontals()) */
-    typedef boost::iterator_range<typename FACTOR::const_iterator> Frontals;
+    typedef ConstFactorRangeIterator Frontals;
 
     /** View of the separator keys (call parents()) */
-    typedef boost::iterator_range<typename FACTOR::const_iterator> Parents;
+    typedef ConstFactorRangeIterator Parents;
 
   protected:
     /// @name Standard Constructors
@@ -121,10 +142,10 @@ namespace gtsam {
     }
 
     /** return a view of the frontal keys */
-    Frontals frontals() const { return boost::make_iterator_range(beginFrontals(), endFrontals()); }
+    Frontals frontals() const { return ConstFactorRangeIterator({beginFrontals(), endFrontals()});}
 
     /** return a view of the parent keys */
-    Parents parents() const { return boost::make_iterator_range(beginParents(), endParents()); }
+    Parents parents() const { return ConstFactorRangeIterator({beginParents(), endParents()}); }
 
     /**
      * All conditional types need to implement a `logProbability` function, for which
@@ -144,13 +165,12 @@ namespace gtsam {
     }
 
     /**
-     * All conditional types need to implement a log normalization constant to
-     * make it such that error>=0.
+     * @brief All conditional types need to implement this as the negative log
+     * of the normalization constant to make it such that error>=0.
+     *
+     * @return double
      */
-    virtual double logNormalizationConstant() const;
-
-    /** Non-virtual, exponentiate logNormalizationConstant. */
-    double normalizationConstant() const;
+    virtual double negLogConstant() const;
 
     /// @}
     /// @name Advanced Interface
@@ -189,9 +209,9 @@ namespace gtsam {
      *  - evaluate >= 0.0
      *  - evaluate(x) == conditional(x)
      *  - exp(logProbability(x)) == evaluate(x)
-     *  - logNormalizationConstant() = log(normalizationConstant())
+     *  - negLogConstant() = -log(normalizationConstant())
      *  - error >= 0.0
-     *  - logProbability(x) == logNormalizationConstant() - error(x)
+     *  - logProbability(x) == -(negLogConstant() + error(x))
      *
      * @param conditional The conditional to test, as a reference to the derived type.
      * @tparam VALUES HybridValues, or a more narrow type like DiscreteValues.
@@ -213,12 +233,14 @@ namespace gtsam {
     // Cast to derived type (const) (casts down to derived conditional type, then up to factor type)
     const FACTOR& asFactor() const { return static_cast<const FACTOR&>(static_cast<const DERIVEDCONDITIONAL&>(*this)); }
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
     void serialize(ARCHIVE & ar, const unsigned int /*version*/) {
       ar & BOOST_SERIALIZATION_NVP(nrFrontals_);
     }
+#endif
 
     /// @}
 

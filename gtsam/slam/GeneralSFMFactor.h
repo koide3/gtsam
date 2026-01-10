@@ -36,10 +36,9 @@
 #include <gtsam/base/Vector.h>
 #include <gtsam/base/timing.h>
 
-#include <boost/none.hpp>
-#include <boost/optional/optional.hpp>
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #include <boost/serialization/nvp.hpp>
-#include <boost/smart_ptr/shared_ptr.hpp>
+#endif
 #include <iostream>
 #include <string>
 
@@ -76,8 +75,11 @@ public:
   typedef GeneralSFMFactor<CAMERA, LANDMARK> This;///< typedef for this object
   typedef NoiseModelFactorN<CAMERA, LANDMARK> Base;///< typedef for the base class
 
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
+
   // shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<This> shared_ptr;
+  typedef std::shared_ptr<This> shared_ptr;
 
   /**
    * Constructor
@@ -100,7 +102,7 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this)));}
 
   /**
@@ -123,11 +125,11 @@ public:
 
   /** h(x)-z */
   Vector evaluateError(const CAMERA& camera, const LANDMARK& point,
-      boost::optional<Matrix&> H1=boost::none, boost::optional<Matrix&> H2=boost::none) const override {
+      OptionalMatrixType H1, OptionalMatrixType H2) const override {
     try {
       return camera.project2(point,H1,H2) - measured_;
     }
-    catch( CheiralityException& e) {
+    catch( CheiralityException& e [[maybe_unused]]) {
       if (H1) *H1 = JacobianC::Zero();
       if (H2) *H2 = JacobianL::Zero();
       //TODO Print the exception via logging
@@ -136,9 +138,9 @@ public:
   }
 
   /// Linearize using fixed-size matrices
-  boost::shared_ptr<GaussianFactor> linearize(const Values& values) const override {
+  std::shared_ptr<GaussianFactor> linearize(const Values& values) const override {
     // Only linearize if the factor is active
-    if (!this->active(values)) return boost::shared_ptr<JacobianFactor>();
+    if (!this->active(values)) return std::shared_ptr<JacobianFactor>();
 
     const Key key1 = this->key1(), key2 = this->key2();
     JacobianC H1;
@@ -148,7 +150,7 @@ public:
       const CAMERA& camera = values.at<CAMERA>(key1);
       const LANDMARK& point = values.at<LANDMARK>(key2);
       b = measured() - camera.project2(point, H1, H2);
-    } catch (CheiralityException& e) {
+    } catch (CheiralityException& e [[maybe_unused]]) {
       H1.setZero();
       H2.setZero();
       b.setZero();
@@ -168,10 +170,10 @@ public:
     // Create new (unit) noiseModel, preserving constraints if applicable
     SharedDiagonal model;
     if (noiseModel && noiseModel->isConstrained()) {
-      model = boost::static_pointer_cast<noiseModel::Constrained>(noiseModel)->unit();
+      model = std::static_pointer_cast<noiseModel::Constrained>(noiseModel)->unit();
     }
 
-    return boost::make_shared<BinaryJacobianFactor<2, DimC, DimL> >(key1, H1, key2, H2, b, model);
+    return std::make_shared<BinaryJacobianFactor<2, DimC, DimL> >(key1, H1, key2, H2, b, model);
   }
 
   /** return the measured */
@@ -180,6 +182,7 @@ public:
   }
 
 private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template<class Archive>
@@ -189,6 +192,7 @@ private:
         boost::serialization::base_object<Base>(*this));
     ar & BOOST_SERIALIZATION_NVP(measured_);
   }
+#endif
 };
 
 template<class CAMERA, class LANDMARK>
@@ -217,7 +221,7 @@ public:
   typedef NoiseModelFactorN<Pose3, Point3, CALIBRATION> Base;///< typedef for the base class
 
   // shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<This> shared_ptr;
+  typedef std::shared_ptr<This> shared_ptr;
 
   /**
    * Constructor
@@ -235,7 +239,7 @@ public:
 
   /// @return a deep copy of this factor
   gtsam::NonlinearFactor::shared_ptr clone() const override {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
         gtsam::NonlinearFactor::shared_ptr(new This(*this)));}
 
   /**
@@ -258,10 +262,7 @@ public:
 
   /** h(x)-z */
   Vector evaluateError(const Pose3& pose3, const Point3& point, const CALIBRATION &calib,
-      boost::optional<Matrix&> H1=boost::none,
-      boost::optional<Matrix&> H2=boost::none,
-      boost::optional<Matrix&> H3=boost::none) const override
-  {
+      OptionalMatrixType H1, OptionalMatrixType H2, OptionalMatrixType H3) const override {
     try {
       Camera camera(pose3,calib);
       return camera.project(point, H1, H2, H3) - measured_;
@@ -282,6 +283,7 @@ public:
   }
 
 private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /** Serialization function */
   friend class boost::serialization::access;
   template<class Archive>
@@ -291,6 +293,7 @@ private:
         boost::serialization::base_object<Base>(*this));
     ar & BOOST_SERIALIZATION_NVP(measured_);
   }
+#endif
 };
 
 template<class CALIBRATION>

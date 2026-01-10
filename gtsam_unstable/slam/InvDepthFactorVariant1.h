@@ -17,8 +17,6 @@
 #include <gtsam/geometry/Point2.h>
 #include <gtsam/base/numericalDerivative.h>
 
-#include <boost/bind/bind.hpp>
-
 namespace gtsam {
 
 /**
@@ -34,13 +32,16 @@ protected:
 public:
 
   /// shorthand for base class type
-  typedef NoiseModelFactorN<Pose3, Vector6> Base;
+  typedef NoiseModelFactor2<Pose3, Vector6> Base;
+
+  // Provide access to the Matrix& version of evaluateError:
+  using Base::evaluateError;
 
   /// shorthand for this class
   typedef InvDepthFactorVariant1 This;
 
   /// shorthand for a smart pointer to a factor
-  typedef boost::shared_ptr<This> shared_ptr;
+  typedef std::shared_ptr<This> shared_ptr;
 
   /// Default constructor
   InvDepthFactorVariant1() :
@@ -103,8 +104,7 @@ public:
 
   /// Evaluate error h(x)-z and optionally derivatives
   Vector evaluateError(const Pose3& pose, const Vector6& landmark,
-      boost::optional<Matrix&> H1=boost::none,
-      boost::optional<Matrix&> H2=boost::none) const override {
+      OptionalMatrixType H1, OptionalMatrixType H2) const override {
 
     if (H1) {
       (*H1) = numericalDerivative11<Vector, Pose3>(
@@ -133,6 +133,7 @@ public:
 
 private:
 
+#if GTSAM_ENABLE_BOOST_SERIALIZATION  ///
   /// Serialization function
   friend class boost::serialization::access;
   template<class ARCHIVE>
@@ -141,6 +142,7 @@ private:
     ar & BOOST_SERIALIZATION_NVP(measured_);
     ar & BOOST_SERIALIZATION_NVP(K_);
   }
+#endif
 };
 
 } // \ namespace gtsam

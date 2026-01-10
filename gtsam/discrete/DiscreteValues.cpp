@@ -17,7 +17,6 @@
 
 #include <gtsam/discrete/DiscreteValues.h>
 
-#include <boost/range/combine.hpp>
 #include <sstream>
 
 using std::cout;
@@ -28,33 +27,53 @@ using std::stringstream;
 namespace gtsam {
 
 /* ************************************************************************ */
+static void stream(std::ostream& os, const DiscreteValues& x,
+                   const KeyFormatter& keyFormatter) {
+  for (const auto& kv : x)
+    os << "(" << keyFormatter(kv.first) << ", " << kv.second << ")";
+}
+
+/* ************************************************************************ */
+std::ostream& operator<<(std::ostream& os, const DiscreteValues& x) {
+  stream(os, x, DefaultKeyFormatter);
+  return os;
+}
+
+/* ************************************************************************ */
 void DiscreteValues::print(const string& s,
                            const KeyFormatter& keyFormatter) const {
   cout << s << ": ";
-  for (auto&& kv : *this)
-    cout << "(" << keyFormatter(kv.first) << ", " << kv.second << ")";
+  stream(cout, *this, keyFormatter);
   cout << endl;
 }
 
 /* ************************************************************************ */
 bool DiscreteValues::equals(const DiscreteValues& x, double tol) const {
   if (this->size() != x.size()) return false;
-  for (const auto values : boost::combine(*this, x)) {
-    if (values.get<0>() != values.get<1>()) return false;
+  auto it1 = x.begin();
+  auto it2 = this->begin();
+  for (; it1 != x.end(); ++it1, ++it2) {
+    if (it1->first != it2->first || it1->second != it2->second) return false;
   }
   return true;
 }
 
 /* ************************************************************************ */
+DiscreteValues& DiscreteValues::insert(
+    const std::pair<Key, size_t>& assignment) {
+  if (count(assignment.first)) {
+    throw std::out_of_range(
+        "Requested to insert a DiscreteValues into another DiscreteValues "
+        "that already contains one or more of its keys.");
+  } else {
+    this->emplace(assignment);
+  }
+  return *this;
+}
+/* ************************************************************************ */
 DiscreteValues& DiscreteValues::insert(const DiscreteValues& values) {
   for (const auto& kv : values) {
-    if (count(kv.first)) {
-      throw std::out_of_range(
-          "Requested to insert a DiscreteValues into another DiscreteValues "
-          "that already contains one or more of its keys.");
-    } else {
-      this->emplace(kv);
-    }
+    this->insert(kv);
   }
   return *this;
 }
@@ -126,6 +145,11 @@ string DiscreteValues::html(const KeyFormatter& keyFormatter,
 }
 
 /* ************************************************************************ */
+void PrintDiscreteValues(const DiscreteValues& values, const std::string& s,
+                         const KeyFormatter& keyFormatter) {
+  values.print(s, keyFormatter);
+}
+
 string markdown(const DiscreteValues& values, const KeyFormatter& keyFormatter,
                 const DiscreteValues::Names& names) {
   return values.markdown(keyFormatter, names);

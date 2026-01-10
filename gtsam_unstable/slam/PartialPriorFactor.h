@@ -20,6 +20,8 @@
 #include <gtsam/nonlinear/NonlinearFactor.h>
 #include <gtsam/base/Lie.h>
 
+#include <cassert>
+
 namespace gtsam {
 
   /**
@@ -50,9 +52,6 @@ namespace gtsam {
     Vector prior_;                 ///< Measurement on tangent space parameters, in compressed form.
     std::vector<size_t> indices_;  ///< Indices of the measured tangent space parameters.
 
-    /** default constructor - only use for serialization */
-    PartialPriorFactor() {}
-
     /**
      * constructor with just minimum requirements for a factor - allows more
      * computation in the constructor.  This should only be used by subclasses
@@ -62,7 +61,11 @@ namespace gtsam {
 
   public:
 
-    ~PartialPriorFactor() override {}
+    // Provide access to the Matrix& version of evaluateError:
+    using Base::evaluateError;
+
+    /** default constructor - only use for serialization */
+    PartialPriorFactor() {}
 
     /** Single Element Constructor: Prior on a single parameter at index 'idx' in the tangent vector.*/
     PartialPriorFactor(Key key, size_t idx, double prior, const SharedNoiseModel& model) :
@@ -82,9 +85,11 @@ namespace gtsam {
       assert(model->dim() == (size_t)prior.size());
     }
 
+    ~PartialPriorFactor() override {}
+
     /// @return a deep copy of this factor
     gtsam::NonlinearFactor::shared_ptr clone() const override {
-      return boost::static_pointer_cast<gtsam::NonlinearFactor>(
+      return std::static_pointer_cast<gtsam::NonlinearFactor>(
           gtsam::NonlinearFactor::shared_ptr(new This(*this))); }
 
     /** implement functions needed for Testable */
@@ -106,7 +111,7 @@ namespace gtsam {
     /** implement functions needed to derive from Factor */
 
     /** Returns a vector of errors for the measured tangent parameters.  */
-    Vector evaluateError(const T& p, boost::optional<Matrix&> H = boost::none) const override {
+    Vector evaluateError(const T& p, OptionalMatrixType H) const override {
       Eigen::Matrix<double, T::dimension, T::dimension> H_local;
 
       // If the Rot3 Cayley map is used, Rot3::LocalCoordinates will throw a runtime error
@@ -137,6 +142,7 @@ namespace gtsam {
     const std::vector<size_t>& indices() const { return indices_; }
 
   private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
     /** Serialization function */
     friend class boost::serialization::access;
     template<class ARCHIVE>
@@ -148,6 +154,7 @@ namespace gtsam {
       ar & BOOST_SERIALIZATION_NVP(indices_);
       // ar & BOOST_SERIALIZATION_NVP(H_);
     }
+#endif
   }; // \class PartialPriorFactor
 
 } /// namespace gtsam

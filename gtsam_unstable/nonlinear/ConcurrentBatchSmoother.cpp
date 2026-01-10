@@ -47,7 +47,7 @@ bool ConcurrentBatchSmoother::equals(const ConcurrentSmoother& rhs, double tol) 
 
 /* ************************************************************************* */
 ConcurrentBatchSmoother::Result ConcurrentBatchSmoother::update(const NonlinearFactorGraph& newFactors, const Values& newTheta,
-    const boost::optional< std::vector<size_t> >& removeFactorIndices) {
+    const std::optional< std::vector<size_t> >& removeFactorIndices) {
 
   gttic(update);
 
@@ -385,7 +385,7 @@ void ConcurrentBatchSmoother::updateSmootherSummarization() {
 void ConcurrentBatchSmoother::PrintNonlinearFactor(const NonlinearFactor::shared_ptr& factor, const std::string& indent, const KeyFormatter& keyFormatter) {
   std::cout << indent;
   if(factor) {
-    if(boost::dynamic_pointer_cast<LinearContainerFactor>(factor)) {
+    if(std::dynamic_pointer_cast<LinearContainerFactor>(factor)) {
       std::cout << "l( ";
     } else {
       std::cout << "f( ";

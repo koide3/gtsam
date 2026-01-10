@@ -34,7 +34,7 @@ namespace gtsam {
 template <size_t d>
 ShonanFactor<d>::ShonanFactor(Key j1, Key j2, const Rot &R12, size_t p,
                               const SharedNoiseModel &model,
-                              const boost::shared_ptr<Matrix> &G)
+                              const std::shared_ptr<Matrix> &G)
     : NoiseModelFactorN<SOn, SOn>(ConvertNoiseModel(model, p * d), j1, j2),
       M_(R12.matrix()), // d*d in all cases
       p_(p),            // 4 for SO(4)
@@ -44,7 +44,7 @@ ShonanFactor<d>::ShonanFactor(Key j1, Key j2, const Rot &R12, size_t p,
     throw std::invalid_argument(
         "ShonanFactor: model with incorrect dimension.");
   if (!G) {
-    G_ = boost::make_shared<Matrix>();
+    G_ = std::make_shared<Matrix>();
     *G_ = SOn::VectorizedGenerators(p); // expensive!
   }
   if (static_cast<size_t>(G_->rows()) != pp_ ||
@@ -75,8 +75,8 @@ bool ShonanFactor<d>::equals(const NonlinearFactor &expected,
 //******************************************************************************
 template <size_t d>
 void ShonanFactor<d>::fillJacobians(const Matrix &M1, const Matrix &M2,
-                                    boost::optional<Matrix &> H1,
-                                    boost::optional<Matrix &> H2) const {
+                                    OptionalMatrixType H1,
+                                    OptionalMatrixType H2) const {
   gttic(ShonanFactor_Jacobians);
   const size_t dim = p_ * d; // Stiefel manifold dimension
 
@@ -106,8 +106,8 @@ void ShonanFactor<d>::fillJacobians(const Matrix &M1, const Matrix &M2,
 //******************************************************************************
 template <size_t d>
 Vector ShonanFactor<d>::evaluateError(const SOn &Q1, const SOn &Q2,
-                                      boost::optional<Matrix &> H1,
-                                      boost::optional<Matrix &> H2) const {
+                                      OptionalMatrixType H1,
+                                      OptionalMatrixType H2) const {
   gttic(ShonanFactor_evaluateError);
 
   const Matrix &M1 = Q1.matrix();

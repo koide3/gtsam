@@ -21,8 +21,9 @@
 #include <gtsam/base/Manifold.h>
 #include <gtsam/base/Testable.h>
 #include <gtsam/base/OptionalJacobian.h>
-#include <boost/concept/assert.hpp>
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
 #include <boost/serialization/nvp.hpp>
+#endif
 #include <iostream>
 
 namespace gtsam {
@@ -54,9 +55,9 @@ private:
   R range_;
 
 public:
-  enum { dimB = traits<B>::dimension };
-  enum { dimR = traits<R>::dimension };
-  enum { dimension = dimB + dimR };
+  constexpr static const size_t dimB = traits<B>::dimension;
+  constexpr static const size_t dimR = traits<R>::dimension;
+  constexpr static const size_t dimension = dimB + dimR;
 
   /// @name Standard Constructors
   /// @{
@@ -77,8 +78,8 @@ public:
   /// Prediction function that stacks measurements
   static BearingRange Measure(
     const A1& a1, const A2& a2,
-    OptionalJacobian<dimension, traits<A1>::dimension> H1 = boost::none,
-    OptionalJacobian<dimension, traits<A2>::dimension> H2 = boost::none) {
+    OptionalJacobian<dimension, traits<A1>::dimension> H1 = {},
+    OptionalJacobian<dimension, traits<A2>::dimension> H2 = {}) {
     typename MakeJacobian<B, A1>::type HB1;
     typename MakeJacobian<B, A2>::type HB2;
     typename MakeJacobian<R, A1>::type HR1;
@@ -137,8 +138,10 @@ public:
   TangentVector localCoordinates(const BearingRange& other) const {
     typename traits<B>::TangentVector v1 = traits<B>::Local(bearing_, other.bearing_);
     typename traits<R>::TangentVector v2 = traits<R>::Local(range_, other.range_);
+    // Set the first dimB elements to v1, and the next dimR elements to v2
     TangentVector v;
-    v << v1, v2;
+    v.template head<dimB>() = v1;
+    v.template tail<dimR>() = v2;
     return v;
   }
 
@@ -147,6 +150,7 @@ public:
   /// @{
 
 private:
+#if GTSAM_ENABLE_BOOST_SERIALIZATION
   /// Serialization function
   template <class ARCHIVE>
   void serialize(ARCHIVE& ar, const unsigned int /*version*/) {
@@ -155,13 +159,12 @@ private:
   }
 
   friend class boost::serialization::access;
+#endif
 
   /// @}
 
   // Alignment, see https://eigen.tuxfamily.org/dox/group__TopicStructHavingEigenMembers.html
-  enum {
-    NeedsToAlign = (sizeof(B) % 16) == 0 || (sizeof(R) % 16) == 0
-  };
+  inline constexpr static auto NeedsToAlign = (sizeof(B) % 16) == 0 || (sizeof(R) % 16) == 0;
 public:
   GTSAM_MAKE_ALIGNED_OPERATOR_NEW_IF(NeedsToAlign)
 };
@@ -181,8 +184,8 @@ struct HasBearing {
   typedef RT result_type;
   RT operator()(
       const A1& a1, const A2& a2,
-      OptionalJacobian<traits<RT>::dimension, traits<A1>::dimension> H1=boost::none,
-      OptionalJacobian<traits<RT>::dimension, traits<A2>::dimension> H2=boost::none) {
+      OptionalJacobian<traits<RT>::dimension, traits<A1>::dimension> H1={},
+      OptionalJacobian<traits<RT>::dimension, traits<A2>::dimension> H2={}) {
     return a1.bearing(a2, H1, H2);
   }
 };
@@ -195,8 +198,8 @@ struct HasRange {
   typedef RT result_type;
   RT operator()(
       const A1& a1, const A2& a2,
-      OptionalJacobian<traits<RT>::dimension, traits<A1>::dimension> H1=boost::none,
-      OptionalJacobian<traits<RT>::dimension, traits<A2>::dimension> H2=boost::none) {
+      OptionalJacobian<traits<RT>::dimension, traits<A1>::dimension> H1={},
+      OptionalJacobian<traits<RT>::dimension, traits<A2>::dimension> H2={}) {
     return a1.range(a2, H1, H2);
   }
 };
