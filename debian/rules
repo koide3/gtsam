@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		-DGTSAM_BUILD_DOCS=OFF \
+		-DGTSAM_BUILD_DOC_HTML=OFF \
+		-DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF \
+		-DGTSAM_BUILD_TESTS=OFF \
+		-DGTSAM_USE_SYSTEM_METIS=ON \
+		-DGTSAM_USE_SYSTEM_EIGEN=ON \
+		-DGTSAM_BUILD_WITH_MARCH_NATIVE=OFF \
+		-DGTSAM_WITH_TBB=ON \
+		-DCMAKE_CXX_FLAGS="$(CXXFLAGS) -Wno-error=overloaded-virtual"
