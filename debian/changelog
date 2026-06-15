@@ -1,3 +1,9 @@
+gtsam (4.3.0-2-1ppa1~resolute1) resolute; urgency=medium
+
+  * 4.3a1
+
+ -- Kenji Koide <k.koide@aist.go.jp>  Tue, 16 Jun 2026 08:33:18 +0900
+
 gtsam (4.3.0-2-1ppa1~noble1) noble; urgency=medium
 
   * 4.3a1
